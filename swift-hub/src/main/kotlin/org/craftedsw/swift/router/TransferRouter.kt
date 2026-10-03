@@ -63,7 +63,12 @@ class TransferRouter(
             } else {
                 -5L
             }
-            bankRegistry.recordTransaction(destBic, response.status == TransferStatus.ACCEPTED, points)
+            bankRegistry.recordTransaction(
+                destBic,
+                response.status == TransferStatus.ACCEPTED,
+                points,
+                if (response.status == TransferStatus.ACCEPTED) enrichedTransfer.amountCents else 0L
+            )
             response
         } catch (e: Exception) {
             logger.warn("Transfer to ${destNode.name} (${destNode.bic}) failed: ${e.message}")

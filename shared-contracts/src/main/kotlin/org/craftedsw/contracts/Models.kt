@@ -121,6 +121,7 @@ data class BankNodeInfo(
     val successfulTransactions: Long = 0,
     val failedTransactions: Long = 0,
     val score: Long = 0,
+    val totalMoneyCents: Long = 0,
     val lastSeenTimestamp: Long = 0
 )
 

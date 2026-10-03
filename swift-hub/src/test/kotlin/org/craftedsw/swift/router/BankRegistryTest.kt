@@ -49,18 +49,19 @@ class BankRegistryTest {
     }
 
     @Test
-    fun `should update scores and transaction counts`() {
+    fun `should update scores and transaction counts and total money`() {
         val bic = Bic("BANKAXXX")
         registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Alpha", webhookUrl = "http://localhost:8080"))
 
-        registry.recordTransaction(bic, isSuccess = true, pointsAwarded = 15)
-        registry.recordTransaction(bic, isSuccess = false, pointsAwarded = -5)
+        registry.recordTransaction(bic, isSuccess = true, pointsAwarded = 15, amountCents = 25000)
+        registry.recordTransaction(bic, isSuccess = false, pointsAwarded = -5, amountCents = 10000)
 
         val node = registry.getBank(bic)!!
         assertThat(node.totalTransactions).isEqualTo(2)
         assertThat(node.successfulTransactions).isEqualTo(1)
         assertThat(node.failedTransactions).isEqualTo(1)
         assertThat(node.score).isEqualTo(10)
+        assertThat(node.totalMoneyCents).isEqualTo(25000)
     }
 
     @Test

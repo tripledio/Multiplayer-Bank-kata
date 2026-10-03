@@ -73,7 +73,7 @@ class BankRegistry {
         }
     }
 
-    fun recordTransaction(bic: Bic, isSuccess: Boolean, pointsAwarded: Long) {
+    fun recordTransaction(bic: Bic, isSuccess: Boolean, pointsAwarded: Long, amountCents: Long = 0L) {
         val targetBank = getBank(bic) ?: return
         registry.computeIfPresent(targetBank.bic) { _, current ->
             current.copy(
@@ -81,6 +81,7 @@ class BankRegistry {
                 successfulTransactions = if (isSuccess) current.successfulTransactions + 1 else current.successfulTransactions,
                 failedTransactions = if (!isSuccess) current.failedTransactions + 1 else current.failedTransactions,
                 score = (current.score + pointsAwarded).coerceAtLeast(0),
+                totalMoneyCents = if (isSuccess) current.totalMoneyCents + amountCents else current.totalMoneyCents,
                 status = if (isSuccess) "HEALTHY" else if (current.failedTransactions > 3) "DEGRADED" else current.status,
                 lastSeenTimestamp = System.currentTimeMillis()
             )

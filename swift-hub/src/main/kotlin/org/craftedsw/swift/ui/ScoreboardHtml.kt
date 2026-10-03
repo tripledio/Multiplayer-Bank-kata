@@ -11,6 +11,7 @@ object ScoreboardHtml {
     <title>SWIFT Hub - Multiplayer Bank Kata Scoreboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 20px; }
@@ -84,6 +85,7 @@ object ScoreboardHtml {
                                         <th class="ps-3">#</th>
                                         <th>BIC</th>
                                         <th>Bank Name</th>
+                                        <th>Total Money</th>
                                         <th>Score</th>
                                         <th>Processed</th>
                                         <th>Success Rate</th>
@@ -91,7 +93,7 @@ object ScoreboardHtml {
                                     </tr>
                                 </thead>
                                 <tbody id="leaderboardBody">
-                                    <tr><td colspan="7" class="text-center py-4 text-secondary">No banks registered yet. Run <code>./gradlew :bank-starter:run</code> to connect.</td></tr>
+                                    <tr><td colspan="8" class="text-center py-4 text-secondary">No banks registered yet. Run <code>./gradlew :bank-starter:run</code> to connect.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -113,7 +115,7 @@ object ScoreboardHtml {
                 </div>
             </div>
 
-            <!-- Live Transaction Feed -->
+            <!-- Right Column: Registration, Pie Chart & Live Feed -->
             <div class="col-lg-5">
                 <!-- Participant Registration & QR Code -->
                 <div class="card mb-3">
@@ -129,6 +131,22 @@ object ScoreboardHtml {
                                 <p class="text-secondary small mb-2">Scan with your phone to register your bank and get your generated 8-character BIC code.</p>
                                 <div><a id="regUrlLink" href="/register" target="_blank" class="text-info font-monospace small text-break"></a></div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Money per Bank (Pie Chart) -->
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>💰 Total Money per Bank</span>
+                        <span class="badge bg-info text-dark" id="chartTotalBadge">€ 0.00</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="chartContainer" style="position: relative; height: 260px;">
+                            <canvas id="moneyPieChart"></canvas>
+                        </div>
+                        <div id="chartEmptyNotice" class="text-center py-4 text-secondary small d-none">
+                            Awaiting settled transactions...
                         </div>
                     </div>
                 </div>
@@ -171,6 +189,91 @@ object ScoreboardHtml {
             return '€ ' + (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
+        let moneyChart = null;
+
+        function updateMoneyChart(banks) {
+            const canvas = document.getElementById('moneyPieChart');
+            const emptyNotice = document.getElementById('chartEmptyNotice');
+            const totalBadge = document.getElementById('chartTotalBadge');
+            if (!canvas) return;
+
+            const registeredBanks = banks || [];
+            const totalCents = registeredBanks.reduce((acc, b) => acc + (b.totalMoneyCents || 0), 0);
+            if (totalBadge) {
+                totalBadge.innerText = formatCents(totalCents);
+            }
+
+            const banksWithMoney = registeredBanks.filter(b => (b.totalMoneyCents || 0) > 0);
+
+            if (banksWithMoney.length === 0) {
+                if (emptyNotice) emptyNotice.classList.remove('d-none');
+                if (canvas) canvas.style.display = 'none';
+                if (moneyChart) {
+                    moneyChart.destroy();
+                    moneyChart = null;
+                }
+                return;
+            }
+
+            if (emptyNotice) emptyNotice.classList.add('d-none');
+            if (canvas) canvas.style.display = 'block';
+
+            const labels = banksWithMoney.map(b => b.name + ' (' + b.bic + ')');
+            const dataValues = banksWithMoney.map(b => (b.totalMoneyCents / 100));
+            const palette = [
+                '#58a6ff', '#3fb950', '#d29922', '#f85149', '#a371f7',
+                '#39c5bb', '#f0883e', '#79c0ff', '#56d364', '#e3b341',
+                '#db61a2', '#7ee787', '#1f6feb', '#238636', '#8957e5'
+            ];
+            const bgColors = labels.map((_, i) => palette[i % palette.length]);
+
+            if (!moneyChart) {
+                const ctx = canvas.getContext('2d');
+                moneyChart = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: dataValues,
+                            backgroundColor: bgColors,
+                            borderColor: '#161b22',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#c9d1d9',
+                                    boxWidth: 12,
+                                    padding: 8,
+                                    font: { size: 11 }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const val = context.raw || 0;
+                                        const sum = dataValues.reduce((a, b) => a + b, 0);
+                                        const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : 0;
+                                        return ' ' + context.label + ': € ' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + pct + '%)';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                moneyChart.data.labels = labels;
+                moneyChart.data.datasets[0].data = dataValues;
+                moneyChart.data.datasets[0].backgroundColor = bgColors;
+                moneyChart.update();
+            }
+        }
+
         async function pollState() {
             try {
                 const res = await fetch('/swift/metrics');
@@ -196,9 +299,11 @@ object ScoreboardHtml {
             document.getElementById('kpiErrorRate').innerText = (m.errorRatePercentage || 0).toFixed(1) + '%';
             document.getElementById('bankCountBadge').innerText = (data.banks || []).length + ' registered';
 
+            updateMoneyChart(data.banks);
+
             const tbody = document.getElementById('leaderboardBody');
             if (!data.banks || data.banks.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-secondary">No banks registered yet. Run <code>./gradlew :bank-starter:run</code> to connect.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-secondary">No banks registered yet. Run <code>./gradlew :bank-starter:run</code> to connect.</td></tr>';
                 return;
             }
 
@@ -214,6 +319,7 @@ object ScoreboardHtml {
                         <td class="ps-3 font-monospace text-secondary">${'$'}{index + 1}</td>
                         <td><span class="badge bg-dark border border-secondary font-monospace">${'$'}{b.bic}</span></td>
                         <td class="fw-bold text-white">${'$'}{b.name}</td>
+                        <td class="text-info fw-bold font-monospace">${'$'}{formatCents(b.totalMoneyCents || 0)}</td>
                         <td class="text-primary fw-bold font-monospace">${'$'}{b.score} pts</td>
                         <td>${'$'}{b.totalTransactions}</td>
                         <td><span class="text-success">${'$'}{rate}</span></td>
@@ -294,5 +400,5 @@ object ScoreboardHtml {
     </script>
 </body>
 </html>
-    """.trimIndent()
+""".trimIndent()
 }
