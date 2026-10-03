@@ -31,6 +31,7 @@ import org.craftedsw.swift.router.AuditLedger
 import org.craftedsw.swift.router.BankRegistry
 import org.craftedsw.swift.router.TransferRouter
 import org.craftedsw.swift.simulator.TrafficSimulator
+import org.craftedsw.swift.ui.RegisterHtml
 import org.craftedsw.swift.ui.ScoreboardHtml
 
 fun Application.swiftHubModule(
@@ -63,11 +64,32 @@ fun Application.swiftHubModule(
             call.respondText(ScoreboardHtml.render(), ContentType.Text.Html)
         }
 
+        get("/register") {
+            call.respondText(RegisterHtml.render(), ContentType.Text.Html)
+        }
+
+        get("/swift/register") {
+            call.respondText(RegisterHtml.render(), ContentType.Text.Html)
+        }
+
         get("/health") {
             call.respond(HealthResponse(status = "UP", bic = "SWIFTHUB"))
         }
 
         post("/swift/register") {
+            val request = call.receive<RegisterBankRequest>()
+            val node = bankRegistry.register(request)
+            call.respond(
+                HttpStatusCode.OK,
+                RegisterBankResponse(
+                    status = "REGISTERED",
+                    bic = node.bic,
+                    message = "Bank '${node.name}' successfully registered on SWIFT network."
+                )
+            )
+        }
+
+        post("/register") {
             val request = call.receive<RegisterBankRequest>()
             val node = bankRegistry.register(request)
             call.respond(

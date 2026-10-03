@@ -60,12 +60,16 @@ Bank-kata/
 # Open live scoreboard dashboard at http://localhost:9000
 ```
 
-### 3. Start a Participant Bank (Port 8080)
+### 3. Register Your Bank & Get BIC Code
+Visit the registration page at `http://<FACILITATOR_IP>:9000/register` (or scan the QR code on the live facilitator scoreboard).
+Enter your Bank Name and Webhook URL to receive your assigned 8-character ASCII BIC code (e.g. `BANKXXXX`).
+
+### 4. Start a Participant Bank (Port 8080)
 ```bash
-PORT=8080 BIC=BANKAXXX BANK_NAME="Bank Alpha" ./gradlew :bank-starter:run
+PORT=8080 BIC=<YOUR_GENERATED_BIC> BANK_NAME="Bank Alpha" ./gradlew :bank-starter:run
 ```
 
-### 4. Interactive API Testing (IntelliJ HTTP Client)
+### 5. Interactive API Testing (IntelliJ HTTP Client)
 - Open `requests/bank-api.http` to test participant bank operations (deposit, withdraw, statements, inter-bank transfers).
 - Open `requests/swift-hub.http` to trigger simulated traffic bursts or inspect the central audit ledger.
 - Choose your environment (`local-alpha`, `local-beta`, `workshop-live`) from the top-right dropdown and click `▶` on any request.

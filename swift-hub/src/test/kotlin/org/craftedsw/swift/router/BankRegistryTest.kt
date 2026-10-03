@@ -62,4 +62,28 @@ class BankRegistryTest {
         assertThat(node.failedTransactions).isEqualTo(1)
         assertThat(node.score).isEqualTo(10)
     }
+
+    @Test
+    fun `should generate 8-character ASCII BIC when bic is omitted or blank`() {
+        val node1 = registry.register(RegisterBankRequest(name = "Bank Alpha", webhookUrl = "https://alpha.loca.lt"))
+        val node2 = registry.register(RegisterBankRequest(name = "Bank Alpha", webhookUrl = "https://alpha2.loca.lt"))
+        val node3 = registry.register(RegisterBankRequest(name = "Tripled Banking", webhookUrl = "https://tripled.loca.lt"))
+
+        assertThat(node1.bic).hasSize(8)
+        assertThat(node1.bic).matches("^[A-Z0-9]{8}$")
+        assertThat(node1.bic).isEqualTo("BANKXXXX")
+
+        assertThat(node2.bic).hasSize(8)
+        assertThat(node2.bic).matches("^[A-Z0-9]{8}$")
+        assertThat(node2.bic).isNotEqualTo(node1.bic)
+
+        assertThat(node3.bic).hasSize(8)
+        assertThat(node3.bic).matches("^[A-Z0-9]{8}$")
+        assertThat(node3.bic).startsWith("TRIP")
+
+        assertThat(registry.getAllBanks()).hasSize(3)
+        assertThat(registry.getBank(Bic(node1.bic))).isNotNull
+        assertThat(registry.getBank(Bic(node2.bic))).isNotNull
+        assertThat(registry.getBank(Bic(node3.bic))).isNotNull
+    }
 }

@@ -10,6 +10,7 @@ object ScoreboardHtml {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SWIFT Hub - Multiplayer Bank Kata Scoreboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         body { background-color: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 20px; }
@@ -114,6 +115,24 @@ object ScoreboardHtml {
 
             <!-- Live Transaction Feed -->
             <div class="col-lg-5">
+                <!-- Participant Registration & QR Code -->
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>📱 Register Your Bank</span>
+                        <a href="/register" target="_blank" class="badge bg-primary text-decoration-none px-2 py-1">Open Page ↗</a>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center gap-3">
+                            <div id="qrcode" class="p-2 bg-white rounded shadow-sm d-flex align-items-center justify-content-center" style="min-width: 100px; min-height: 100px;"></div>
+                            <div>
+                                <div class="fw-bold text-white mb-1">Scan to Register Bank</div>
+                                <p class="text-secondary small mb-2">Scan with your phone to register your bank and get your generated 8-character BIC code.</p>
+                                <div><a id="regUrlLink" href="/register" target="_blank" class="text-info font-monospace small text-break"></a></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <span>📋 Live Settlement Feed</span>
@@ -233,6 +252,28 @@ object ScoreboardHtml {
         // SSE or regular polling fallback
         setInterval(pollState, 1500);
         pollState();
+
+        function initQrCode() {
+            const regUrl = new URL('/register', window.location.href).href;
+            const linkEl = document.getElementById('regUrlLink');
+            if (linkEl) {
+                linkEl.innerText = regUrl;
+                linkEl.href = regUrl;
+            }
+            const qrEl = document.getElementById('qrcode');
+            if (qrEl && typeof QRCode !== 'undefined') {
+                qrEl.innerHTML = '';
+                new QRCode(qrEl, {
+                    text: regUrl,
+                    width: 100,
+                    height: 100,
+                    colorDark: '#000000',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            }
+        }
+        initQrCode();
 
         async function startSim() {
             await fetch('/swift/simulator/start', { method: 'POST' });

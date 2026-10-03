@@ -38,7 +38,7 @@ enum class TransferStatus {
 
 @Serializable
 data class RegisterBankRequest(
-    val bic: String,
+    val bic: String = "",
     val name: String,
     val webhookUrl: String
 )

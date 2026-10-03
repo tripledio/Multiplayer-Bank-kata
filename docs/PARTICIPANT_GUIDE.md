@@ -17,37 +17,33 @@ From the repository root:
 ```
 All unit tests in `:bank-starter` should run and pass in ~1-2 seconds.
 
-### 3. Start Your Bank Node
-Launch your bank application with your assigned or chosen 8-character BIC code:
-```bash
-PORT=8080 BIC=BANKAXXX BANK_NAME="Bank Alpha" ./gradlew :bank-starter:run
-```
-
-### 4. Expose Your Bank via Tunnel
-In a new terminal tab, expose your local port `8080` to the internet:
+### 3. Expose Your Bank via Tunnel
+In a terminal tab, expose your local port `8080` to the network / internet:
 ```bash
 npx localtunnel --port 8080
 ```
 *Note the public HTTPS URL printed (e.g., `https://brave-fox-42.loca.lt`).*
 
-### 5. Register with the SWIFT Hub
-Register your public tunnel URL with the facilitator's SWIFT Hub:
+### 4. Register Your Bank with the SWIFT Hub
+Visit the registration page on the facilitator's SWIFT Hub:
+- **Registration URL**: `http://<FACILITATOR_IP>:9000/register` (or scan the **QR code** on the live facilitator scoreboard)
+- Enter your **Bank Name** (e.g., `Bank Alpha`) and **Webhook URL** (e.g., `https://brave-fox-42.loca.lt`).
+- The backend will generate and return your assigned 8-character ASCII **BIC code** (e.g. `BANKXXXX`).
+
+*(Alternative CLI option)*:
 ```bash
 curl -X POST http://<FACILITATOR_IP>:9000/swift/register \
   -H "Content-Type: application/json" \
   -d '{
-    "bic": "BANKAXXX",
     "name": "Bank Alpha",
     "webhookUrl": "https://brave-fox-42.loca.lt"
   }'
 ```
-You should receive a `200 OK` response:
-```json
-{
-  "status": "REGISTERED",
-  "bic": "BANKAXXX",
-  "message": "Bank 'Bank Alpha' successfully registered on SWIFT network."
-}
+
+### 5. Start Your Bank Node
+Launch your bank application with your assigned 8-character BIC code:
+```bash
+PORT=8080 BIC=<YOUR_GENERATED_BIC> BANK_NAME="Bank Alpha" ./gradlew :bank-starter:run
 ```
 Watch your bank appear on the live projector scoreboard!
 

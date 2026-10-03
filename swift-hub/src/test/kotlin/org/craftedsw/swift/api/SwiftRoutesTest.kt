@@ -196,5 +196,80 @@ class SwiftRoutesTest {
         assertThat(scoreboardRes.status).isEqualTo(HttpStatusCode.OK)
         val scoreboardHtml = scoreboardRes.body<String>()
         assertThat(scoreboardHtml).contains("SWIFT Network Clearing House")
+        assertThat(scoreboardHtml).contains("Register Your Bank")
+        assertThat(scoreboardHtml).contains("qrcode")
+    }
+
+    @Test
+    fun `registration page endpoints should serve HTML registration page`() = testApplication {
+        application {
+            swiftHubModule()
+        }
+
+        val client = createClient { }
+        val registerRes = client.get("/register")
+        assertThat(registerRes.status).isEqualTo(HttpStatusCode.OK)
+        val registerHtml = registerRes.body<String>()
+        assertThat(registerHtml).contains("Register Your Bank")
+        assertThat(registerHtml).contains("Bank Name")
+        assertThat(registerHtml).contains("Webhook URL")
+
+        val swiftRegisterRes = client.get("/swift/register")
+        assertThat(swiftRegisterRes.status).isEqualTo(HttpStatusCode.OK)
+        val swiftRegisterHtml = swiftRegisterRes.body<String>()
+        assertThat(swiftRegisterHtml).contains("Register Your Bank")
+    }
+
+    @Test
+    fun `register bank without BIC should generate 8-character ASCII BIC`() = testApplication {
+        val registry = BankRegistry()
+        application {
+            swiftHubModule(bankRegistry = registry)
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+        }
+
+        val response = client.post("/swift/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterBankRequest(name = "Bank Gamma", webhookUrl = "https://gamma.loca.lt"))
+        }
+
+        assertThat(response.status).isEqualTo(HttpStatusCode.OK)
+        val body = response.body<RegisterBankResponse>()
+        assertThat(body.status).isEqualTo("REGISTERED")
+        assertThat(body.bic).hasSize(8)
+        assertThat(body.bic).matches("^[A-Z0-9]{8}$")
+        assertThat(body.bic).startsWith("BANK")
+        assertThat(body.message).contains("Bank Gamma")
+
+        val banks = client.get("/swift/banks").body<List<BankNodeInfo>>()
+        assertThat(banks).hasSize(1)
+        assertThat(banks.first().bic).isEqualTo(body.bic)
+        assertThat(banks.first().name).isEqualTo("Bank Gamma")
+    }
+
+    @Test
+    fun `post to register endpoint alias should register bank successfully`() = testApplication {
+        val registry = BankRegistry()
+        application {
+            swiftHubModule(bankRegistry = registry)
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+        }
+
+        val response = client.post("/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterBankRequest(name = "Delta Bank", webhookUrl = "https://delta.loca.lt"))
+        }
+
+        assertThat(response.status).isEqualTo(HttpStatusCode.OK)
+        val body = response.body<RegisterBankResponse>()
+        assertThat(body.status).isEqualTo("REGISTERED")
+        assertThat(body.bic).hasSize(8)
+        assertThat(body.bic).startsWith("DELT")
     }
 }
