@@ -101,7 +101,7 @@ object ScoreboardHtml {
                 </div>
 
                 <!-- Facilitator Controls -->
-                <div class="card">
+                <div class="card mb-3">
                     <div class="card-header">⚡ Facilitator Simulation Controls</div>
                     <div class="card-body">
                         <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -110,6 +110,22 @@ object ScoreboardHtml {
                             <button class="btn btn-primary btn-control" onclick="triggerBurst(5)">⚡ Fire 5 Tx Burst</button>
                             <button class="btn btn-warning btn-control" onclick="triggerBurst(20)">💥 Fire 20 Tx Surge</button>
                             <span id="simStatus" class="badge bg-secondary ms-auto">Simulator: Idle</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Money History (Line Chart) -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>📈 Bank Money Timeline (Relative Scale)</span>
+                        <span class="badge bg-secondary" id="lineChartPointsBadge">Live History</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="lineChartContainer" style="position: relative; height: 260px;">
+                            <canvas id="moneyLineChart"></canvas>
+                        </div>
+                        <div id="lineChartEmptyNotice" class="text-center py-4 text-secondary small d-none">
+                            Awaiting registered banks to plot timeline...
                         </div>
                     </div>
                 </div>
@@ -189,6 +205,12 @@ object ScoreboardHtml {
             return '€ ' + (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
+        const palette = [
+            '#58a6ff', '#3fb950', '#d29922', '#f85149', '#a371f7',
+            '#39c5bb', '#f0883e', '#79c0ff', '#56d364', '#e3b341',
+            '#db61a2', '#7ee787', '#1f6feb', '#238636', '#8957e5'
+        ];
+
         let moneyChart = null;
 
         function updateMoneyChart(banks) {
@@ -220,11 +242,6 @@ object ScoreboardHtml {
 
             const labels = banksWithMoney.map(b => b.name + ' (' + b.bic + ')');
             const dataValues = banksWithMoney.map(b => (b.totalMoneyCents / 100));
-            const palette = [
-                '#58a6ff', '#3fb950', '#d29922', '#f85149', '#a371f7',
-                '#39c5bb', '#f0883e', '#79c0ff', '#56d364', '#e3b341',
-                '#db61a2', '#7ee787', '#1f6feb', '#238636', '#8957e5'
-            ];
             const bgColors = labels.map((_, i) => palette[i % palette.length]);
 
             if (!moneyChart) {
@@ -274,6 +291,145 @@ object ScoreboardHtml {
             }
         }
 
+        let moneyLineChart = null;
+        const lineTimeLabels = [];
+        const bankHistory = {};
+        const MAX_HISTORY_POINTS = 60;
+
+        function updateMoneyLineChart(banks) {
+            const canvas = document.getElementById('moneyLineChart');
+            const emptyNotice = document.getElementById('lineChartEmptyNotice');
+            if (!canvas) return;
+
+            const registeredBanks = banks || [];
+            if (registeredBanks.length === 0) {
+                if (emptyNotice) emptyNotice.classList.remove('d-none');
+                if (canvas) canvas.style.display = 'none';
+                if (moneyLineChart) {
+                    moneyLineChart.destroy();
+                    moneyLineChart = null;
+                }
+                return;
+            }
+
+            if (emptyNotice) emptyNotice.classList.add('d-none');
+            if (canvas) canvas.style.display = 'block';
+
+            const nowLabel = new Date().toLocaleTimeString();
+            lineTimeLabels.push(nowLabel);
+            if (lineTimeLabels.length > MAX_HISTORY_POINTS) {
+                lineTimeLabels.shift();
+            }
+
+            registeredBanks.forEach((b, idx) => {
+                const val = (b.totalMoneyCents || 0) / 100;
+                if (!bankHistory[b.bic]) {
+                    const initial = Array(Math.max(0, lineTimeLabels.length - 1)).fill(0);
+                    bankHistory[b.bic] = {
+                        name: b.name,
+                        bic: b.bic,
+                        color: palette[idx % palette.length],
+                        data: initial
+                    };
+                }
+                bankHistory[b.bic].name = b.name;
+                bankHistory[b.bic].data.push(val);
+                if (bankHistory[b.bic].data.length > MAX_HISTORY_POINTS) {
+                    bankHistory[b.bic].data.shift();
+                }
+            });
+
+            Object.keys(bankHistory).forEach(bic => {
+                const isCurrentlyRegistered = registeredBanks.some(b => b.bic === bic);
+                if (!isCurrentlyRegistered) {
+                    const lastVal = bankHistory[bic].data.length > 0 ? bankHistory[bic].data[bankHistory[bic].data.length - 1] : 0;
+                    bankHistory[bic].data.push(lastVal);
+                    if (bankHistory[bic].data.length > MAX_HISTORY_POINTS) {
+                        bankHistory[bic].data.shift();
+                    }
+                }
+            });
+
+            const datasets = Object.keys(bankHistory).map(bic => {
+                const item = bankHistory[bic];
+                return {
+                    label: item.name + ' (' + item.bic + ')',
+                    data: [...item.data],
+                    borderColor: item.color,
+                    backgroundColor: item.color,
+                    borderWidth: 2,
+                    tension: 0.25,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    fill: false
+                };
+            });
+
+            if (!moneyLineChart) {
+                const ctx = canvas.getContext('2d');
+                moneyLineChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [...lineTimeLabels],
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: '#21262d' },
+                                ticks: {
+                                    color: '#8b949e',
+                                    maxTicksLimit: 8,
+                                    font: { size: 10 }
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: '#21262d' },
+                                ticks: {
+                                    color: '#8b949e',
+                                    font: { size: 10 },
+                                    callback: function(value) {
+                                        return '€ ' + value.toLocaleString('en-US');
+                                    }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    color: '#c9d1d9',
+                                    boxWidth: 12,
+                                    padding: 8,
+                                    font: { size: 11 }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const val = context.raw || 0;
+                                        return ' ' + context.dataset.label + ': € ' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                moneyLineChart.data.labels = [...lineTimeLabels];
+                moneyLineChart.data.datasets = datasets;
+                moneyLineChart.update('none');
+            }
+        }
+
         async function pollState() {
             try {
                 const res = await fetch('/swift/metrics');
@@ -300,6 +456,7 @@ object ScoreboardHtml {
             document.getElementById('bankCountBadge').innerText = (data.banks || []).length + ' registered';
 
             updateMoneyChart(data.banks);
+            updateMoneyLineChart(data.banks);
 
             const tbody = document.getElementById('leaderboardBody');
             if (!data.banks || data.banks.length === 0) {

@@ -199,8 +199,10 @@ class SwiftRoutesTest {
         assertThat(scoreboardHtml).contains("Register Your Bank")
         assertThat(scoreboardHtml).contains("qrcode")
         assertThat(scoreboardHtml).contains("moneyPieChart")
+        assertThat(scoreboardHtml).contains("moneyLineChart")
         assertThat(scoreboardHtml).contains("chart.js")
         assertThat(scoreboardHtml).contains("Total Money per Bank")
+        assertThat(scoreboardHtml).contains("Bank Money Timeline")
     }
 
     @Test
