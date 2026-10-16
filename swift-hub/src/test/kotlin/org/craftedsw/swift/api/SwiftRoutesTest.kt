@@ -2,11 +2,13 @@ package org.craftedsw.swift.api
 
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.basicAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -47,7 +49,7 @@ class SwiftRoutesTest {
     }
 
     @Test
-    fun `register bank should add bank to registry and return confirmation`() = testApplication {
+    fun `register bank should add bank to registry and return confirmation without auth`() = testApplication {
         val registry = BankRegistry()
         application {
             swiftHubModule(bankRegistry = registry)
@@ -74,7 +76,7 @@ class SwiftRoutesTest {
     }
 
     @Test
-    fun `transfer should reject if destination bank not registered`() = testApplication {
+    fun `transfer should reject if destination bank not registered without requiring auth`() = testApplication {
         val registry = BankRegistry()
         val ledger = AuditLedger()
         application {
@@ -104,7 +106,47 @@ class SwiftRoutesTest {
     }
 
     @Test
-    fun `metrics endpoint should return network summary`() = testApplication {
+    fun `unauthenticated access to facilitator routes should return 401 Unauthorized`() = testApplication {
+        application {
+            swiftHubModule()
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+        }
+
+        val rootRes = client.get("/")
+        assertThat(rootRes.status).isEqualTo(HttpStatusCode.Unauthorized)
+        assertThat(rootRes.headers[HttpHeaders.WWWAuthenticate]).contains("Basic")
+
+        val scoreboardRes = client.get("/scoreboard")
+        assertThat(scoreboardRes.status).isEqualTo(HttpStatusCode.Unauthorized)
+
+        val metricsRes = client.get("/swift/metrics")
+        assertThat(metricsRes.status).isEqualTo(HttpStatusCode.Unauthorized)
+
+        val simulatorStatusRes = client.get("/swift/simulator/status")
+        assertThat(simulatorStatusRes.status).isEqualTo(HttpStatusCode.Unauthorized)
+
+        val simStartRes = client.post("/swift/simulator/start")
+        assertThat(simStartRes.status).isEqualTo(HttpStatusCode.Unauthorized)
+    }
+
+    @Test
+    fun `wrong credentials should return 401 Unauthorized`() = testApplication {
+        application {
+            swiftHubModule(credentials = FacilitatorCredentials("admin", "secret123"))
+        }
+
+        val client = createClient { }
+        val response = client.get("/scoreboard") {
+            basicAuth("admin", "wrong-password")
+        }
+        assertThat(response.status).isEqualTo(HttpStatusCode.Unauthorized)
+    }
+
+    @Test
+    fun `metrics endpoint should return network summary with basic auth`() = testApplication {
         val registry = BankRegistry()
         registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "http://localhost:8080"))
         application {
@@ -115,7 +157,9 @@ class SwiftRoutesTest {
             install(ContentNegotiation) { json() }
         }
 
-        val response = client.get("/swift/metrics")
+        val response = client.get("/swift/metrics") {
+            basicAuth("admin", "admin")
+        }
         assertThat(response.status).isEqualTo(HttpStatusCode.OK)
         val scoreboard = response.body<ScoreboardState>()
         assertThat(scoreboard.banks).hasSize(1)
@@ -123,7 +167,7 @@ class SwiftRoutesTest {
     }
 
     @Test
-    fun `simulator endpoints should start, burst, and stop`() = testApplication {
+    fun `simulator endpoints should start, burst, and stop with basic auth`() = testApplication {
         application {
             swiftHubModule()
         }
@@ -132,32 +176,42 @@ class SwiftRoutesTest {
             install(ContentNegotiation) { json() }
         }
 
-        val startRes = client.post("/swift/simulator/start?intervalMs=1000")
+        val startRes = client.post("/swift/simulator/start?intervalMs=1000") {
+            basicAuth("admin", "admin")
+        }
         assertThat(startRes.status).isEqualTo(HttpStatusCode.OK)
         val startBody = startRes.body<SimulatorStatusResponse>()
         assertThat(startBody.status).isEqualTo("RUNNING")
         assertThat(startBody.intervalMs).isEqualTo(1000L)
 
-        val runningStatus = client.get("/swift/simulator/status").body<SimulatorStatusResponse>()
+        val runningStatus = client.get("/swift/simulator/status") {
+            basicAuth("admin", "admin")
+        }.body<SimulatorStatusResponse>()
         assertThat(runningStatus.status).isEqualTo("RUNNING")
         assertThat(runningStatus.intervalMs).isEqualTo(1000L)
 
-        val burstRes = client.post("/swift/simulator/burst?count=3")
+        val burstRes = client.post("/swift/simulator/burst?count=3") {
+            basicAuth("admin", "admin")
+        }
         assertThat(burstRes.status).isEqualTo(HttpStatusCode.OK)
         val burstBody = burstRes.body<SimulatorStatusResponse>()
         assertThat(burstBody.status).isEqualTo("BURST_EXECUTED")
 
-        val stopRes = client.post("/swift/simulator/stop")
+        val stopRes = client.post("/swift/simulator/stop") {
+            basicAuth("admin", "admin")
+        }
         assertThat(stopRes.status).isEqualTo(HttpStatusCode.OK)
         val stopBody = stopRes.body<SimulatorStatusResponse>()
         assertThat(stopBody.status).isEqualTo("STOPPED")
 
-        val stoppedStatus = client.get("/swift/simulator/status").body<SimulatorStatusResponse>()
+        val stoppedStatus = client.get("/swift/simulator/status") {
+            basicAuth("admin", "admin")
+        }.body<SimulatorStatusResponse>()
         assertThat(stoppedStatus.status).isEqualTo("STOPPED")
     }
 
     @Test
-    fun `ledger endpoint should return serializable ledger response with entries`() = testApplication {
+    fun `ledger endpoint should return serializable ledger response with entries when authenticated`() = testApplication {
         val ledger = AuditLedger()
         ledger.record(
             TransferRequest(
@@ -177,7 +231,9 @@ class SwiftRoutesTest {
             install(ContentNegotiation) { json() }
         }
 
-        val response = client.get("/swift/ledger")
+        val response = client.get("/swift/ledger") {
+            basicAuth("admin", "admin")
+        }
         assertThat(response.status).isEqualTo(HttpStatusCode.OK)
         val ledgerResponse = response.body<LedgerResponse>()
         assertThat(ledgerResponse.totalSettledVolumeCents).isEqualTo(50000L)
@@ -189,18 +245,22 @@ class SwiftRoutesTest {
     }
 
     @Test
-    fun `root and scoreboard endpoints should serve HTML dashboard`() = testApplication {
+    fun `root and scoreboard endpoints should serve HTML dashboard when authenticated`() = testApplication {
         application {
-            swiftHubModule()
+            swiftHubModule(credentials = FacilitatorCredentials("facilitator", "workshop2026"))
         }
 
         val client = createClient { }
-        val rootRes = client.get("/")
+        val rootRes = client.get("/") {
+            basicAuth("facilitator", "workshop2026")
+        }
         assertThat(rootRes.status).isEqualTo(HttpStatusCode.OK)
         val rootHtml = rootRes.body<String>()
         assertThat(rootHtml).contains("SWIFT Network Clearing House")
 
-        val scoreboardRes = client.get("/scoreboard")
+        val scoreboardRes = client.get("/scoreboard") {
+            basicAuth("facilitator", "workshop2026")
+        }
         assertThat(scoreboardRes.status).isEqualTo(HttpStatusCode.OK)
         val scoreboardHtml = scoreboardRes.body<String>()
         assertThat(scoreboardHtml).contains("SWIFT Network Clearing House")
@@ -214,7 +274,7 @@ class SwiftRoutesTest {
     }
 
     @Test
-    fun `registration page endpoints should serve HTML registration page`() = testApplication {
+    fun `registration page endpoints should serve HTML registration page without auth`() = testApplication {
         application {
             swiftHubModule()
         }
@@ -234,7 +294,7 @@ class SwiftRoutesTest {
     }
 
     @Test
-    fun `register bank without BIC should generate 8-character ASCII BIC`() = testApplication {
+    fun `register bank without BIC should generate 8-character ASCII BIC without auth`() = testApplication {
         val registry = BankRegistry()
         application {
             swiftHubModule(bankRegistry = registry)
@@ -264,7 +324,7 @@ class SwiftRoutesTest {
     }
 
     @Test
-    fun `post to register endpoint alias should register bank successfully`() = testApplication {
+    fun `post to register endpoint alias should register bank successfully without auth`() = testApplication {
         val registry = BankRegistry()
         application {
             swiftHubModule(bankRegistry = registry)
@@ -287,7 +347,7 @@ class SwiftRoutesTest {
     }
 
     @Test
-    fun `deposit scenario endpoints should return scenario execution status`() = testApplication {
+    fun `deposit scenario endpoints should return scenario execution status when authenticated`() = testApplication {
         application {
             swiftHubModule()
         }
@@ -296,31 +356,41 @@ class SwiftRoutesTest {
             install(ContentNegotiation) { json() }
         }
 
-        val posRes = client.post("/swift/simulator/scenario/deposit-positive")
+        val posRes = client.post("/swift/simulator/scenario/deposit-positive") {
+            basicAuth("admin", "admin")
+        }
         assertThat(posRes.status).isEqualTo(HttpStatusCode.OK)
         val posBody = posRes.body<SimulatorStatusResponse>()
         assertThat(posBody.status).isEqualTo("SCENARIO_EXECUTED")
         assertThat(posBody.results).isNotNull
 
-        val negRes = client.post("/swift/simulator/scenario/deposit-negative")
+        val negRes = client.post("/swift/simulator/scenario/deposit-negative") {
+            basicAuth("admin", "admin")
+        }
         assertThat(negRes.status).isEqualTo(HttpStatusCode.OK)
         val negBody = negRes.body<SimulatorStatusResponse>()
         assertThat(negBody.status).isEqualTo("SCENARIO_EXECUTED")
         assertThat(negBody.results).isNotNull
 
-        val allRes = client.post("/swift/simulator/scenario/deposit")
+        val allRes = client.post("/swift/simulator/scenario/deposit") {
+            basicAuth("admin", "admin")
+        }
         assertThat(allRes.status).isEqualTo(HttpStatusCode.OK)
         val allBody = allRes.body<SimulatorStatusResponse>()
         assertThat(allBody.status).isEqualTo("SCENARIO_EXECUTED")
         assertThat(allBody.results).isNotNull
 
-        val withdrawRes = client.post("/swift/simulator/scenario/withdraw")
+        val withdrawRes = client.post("/swift/simulator/scenario/withdraw") {
+            basicAuth("admin", "admin")
+        }
         assertThat(withdrawRes.status).isEqualTo(HttpStatusCode.OK)
         val withdrawBody = withdrawRes.body<SimulatorStatusResponse>()
         assertThat(withdrawBody.status).isEqualTo("SCENARIO_EXECUTED")
         assertThat(withdrawBody.results).isNotNull
 
-        val runAllRes = client.post("/swift/simulator/scenario/all")
+        val runAllRes = client.post("/swift/simulator/scenario/all") {
+            basicAuth("admin", "admin")
+        }
         assertThat(runAllRes.status).isEqualTo(HttpStatusCode.OK)
         val runAllBody = runAllRes.body<SimulatorStatusResponse>()
         assertThat(runAllBody.status).isEqualTo("SCENARIO_EXECUTED")
@@ -328,7 +398,7 @@ class SwiftRoutesTest {
     }
 
     @Test
-    fun `delete bank should remove it from registry and return 404 when unknown`() = testApplication {
+    fun `delete bank should remove it from registry and return 404 when unknown when authenticated`() = testApplication {
         val registry = BankRegistry()
         registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "https://alpha.loca.lt"))
         application {
@@ -339,11 +409,55 @@ class SwiftRoutesTest {
             install(ContentNegotiation) { json() }
         }
 
-        val response = client.delete("/swift/banks/BANKAXXX")
+        val response = client.delete("/swift/banks/BANKAXXX") {
+            basicAuth("admin", "admin")
+        }
         assertThat(response.status).isEqualTo(HttpStatusCode.OK)
         assertThat(response.body<BankNodeInfo>().name).isEqualTo("Bank Alpha")
         assertThat(client.get("/swift/banks").body<List<BankNodeInfo>>()).isEmpty()
 
-        assertThat(client.delete("/swift/banks/BANKAXXX").status).isEqualTo(HttpStatusCode.NotFound)
+        assertThat(client.delete("/swift/banks/BANKAXXX") {
+            basicAuth("admin", "admin")
+        }.status).isEqualTo(HttpStatusCode.NotFound)
+    }
+
+    @Test
+    fun `FacilitatorCredentials resolution supports multiple env variable conventions`() {
+        // Default when no env vars
+        val defaultCreds = FacilitatorCredentials.fromEnv { null }
+        assertThat(defaultCreds.username).isEqualTo("admin")
+        assertThat(defaultCreds.password).isEqualTo("admin")
+
+        // Single FACILITATOR_AUTH with user:pass
+        val userPass = FacilitatorCredentials.fromEnv { key ->
+            if (key == "FACILITATOR_AUTH") "facilitator:supersecret" else null
+        }
+        assertThat(userPass.username).isEqualTo("facilitator")
+        assertThat(userPass.password).isEqualTo("supersecret")
+
+        // Single FACILITATOR_AUTH with just password (username = password)
+        val sameUserPass = FacilitatorCredentials.fromEnv { key ->
+            if (key == "FACILITATOR_AUTH") "mypassword" else null
+        }
+        assertThat(sameUserPass.username).isEqualTo("mypassword")
+        assertThat(sameUserPass.password).isEqualTo("mypassword")
+
+        // FACILITATOR_USERNAME and FACILITATOR_PASSWORD
+        val separateVars = FacilitatorCredentials.fromEnv { key ->
+            when (key) {
+                "FACILITATOR_USERNAME" -> "moderator"
+                "FACILITATOR_PASSWORD" -> "modpass"
+                else -> null
+            }
+        }
+        assertThat(separateVars.username).isEqualTo("moderator")
+        assertThat(separateVars.password).isEqualTo("modpass")
+
+        // Only password set (username matches password)
+        val onlyPass = FacilitatorCredentials.fromEnv { key ->
+            if (key == "FACILITATOR_PASSWORD") "secretkey" else null
+        }
+        assertThat(onlyPass.username).isEqualTo("secretkey")
+        assertThat(onlyPass.password).isEqualTo("secretkey")
     }
 }

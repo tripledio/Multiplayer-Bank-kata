@@ -24,6 +24,7 @@ GET {{hubUrl}}/health
 ### -------------------------------------------------------------------------
 # Fetch real-time bank rankings, throughput, error rates, and registered nodes.
 GET {{hubUrl}}/swift/metrics
+Authorization: {{facilitatorAuth}}
 
 > {%
     client.test("Metrics return connected banks and scoreboard", function() {
@@ -37,6 +38,7 @@ GET {{hubUrl}}/swift/metrics
 ### -------------------------------------------------------------------------
 # Inspect the central audit ledger to verify that no money was created or lost.
 GET {{hubUrl}}/swift/ledger
+Authorization: {{facilitatorAuth}}
 
 > {%
     client.test("Ledger verifies conservation of money", function() {
@@ -98,51 +100,84 @@ Content-Type: application/json
 ### -------------------------------------------------------------------------
 # Start continuous simulated customer traffic across connected banks (every 2s).
 POST {{hubUrl}}/swift/simulator/start?intervalMs=2000
+Authorization: {{facilitatorAuth}}
 
 ### -------------------------------------------------------------------------
 ### 8. Traffic Simulator - Trigger a 5-Transaction Burst (⚡ Mini Wave)
 ### -------------------------------------------------------------------------
 # Send 5 rapid inter-bank transfers across connected banks.
 POST {{hubUrl}}/swift/simulator/burst?count=5
+Authorization: {{facilitatorAuth}}
 
 ### -------------------------------------------------------------------------
 ### 9. Traffic Simulator - Trigger a 20-Transaction Surge (💥 Chaos Spike)
 ### -------------------------------------------------------------------------
 # Send a high-volume surge of 20 rapid transfers to test resilience under load.
 POST {{hubUrl}}/swift/simulator/burst?count=20
+Authorization: {{facilitatorAuth}}
 
 ### -------------------------------------------------------------------------
 ### 10. Traffic Simulator - Stop Traffic Generation
 ### -------------------------------------------------------------------------
 # Pause all automated background traffic simulation.
 POST {{hubUrl}}/swift/simulator/stop
+Authorization: {{facilitatorAuth}}
 
 ### -------------------------------------------------------------------------
 ### 11. Traffic Simulator - Check Status
 ### -------------------------------------------------------------------------
 # Returns RUNNING or STOPPED along with the current interval.
 GET {{hubUrl}}/swift/simulator/status
+Authorization: {{facilitatorAuth}}
 
 ### -------------------------------------------------------------------------
 ### 12. Traffic Simulator - One-off Deposit Test Scenario (+50.00 EUR)
 ### -------------------------------------------------------------------------
 # Run positive deposit scenario for each registered bank: deposit 50 EUR and assert 50 EUR balance.
 POST {{hubUrl}}/swift/simulator/scenario/deposit-positive
+Authorization: {{facilitatorAuth}}
 
 ### -------------------------------------------------------------------------
 ### 13. Traffic Simulator - One-off Deposit Test Scenario (-50.00 EUR)
 ### -------------------------------------------------------------------------
 # Run negative deposit scenario for each registered bank: deposit -50 EUR, assert error received and not 0 EUR in account.
 POST {{hubUrl}}/swift/simulator/scenario/deposit-negative
+Authorization: {{facilitatorAuth}}
 
 ### -------------------------------------------------------------------------
-### 14. Traffic Simulator - One-off Deposit & Withdraw Test Scenario
+### 14. Traffic Simulator - Phase 2: Withdrawals Test Scenarios
 ### -------------------------------------------------------------------------
-# Run deposit & withdraw scenario for each registered bank: deposit 50 EUR, withdraw 20 EUR, assert 30 EUR balance and statement lines.
+# Run withdrawals phase scenarios (happy 20 EUR withdraw, -50 EUR negative withdraw rejection, overdraft rejection).
 POST {{hubUrl}}/swift/simulator/scenario/withdraw
+Authorization: {{facilitatorAuth}}
 
 ### -------------------------------------------------------------------------
-### 15. Traffic Simulator - Run All Test Scenarios (With Statement Verification)
+### 15. Traffic Simulator - Phase 3: Transfers Test Scenarios
+### -------------------------------------------------------------------------
+# Run transfers phase scenarios (intra-bank transfer and cross-bank transfer via SWIFT Hub).
+POST {{hubUrl}}/swift/simulator/scenario/transfer
+Authorization: {{facilitatorAuth}}
+
+### -------------------------------------------------------------------------
+### 16. Traffic Simulator - Toggle Scenario Phases (Deposits / Withdrawals / Transfers)
+### -------------------------------------------------------------------------
+# Toggle 10s evaluation loop for deposits phase.
+POST {{hubUrl}}/swift/simulator/phase/deposits/toggle
+Authorization: {{facilitatorAuth}}
+
+###
+# Toggle 10s evaluation loop for withdrawals phase.
+POST {{hubUrl}}/swift/simulator/phase/withdrawals/toggle
+Authorization: {{facilitatorAuth}}
+
+###
+# Toggle 10s evaluation loop for transfers phase.
+POST {{hubUrl}}/swift/simulator/phase/transfers/toggle
+Authorization: {{facilitatorAuth}}
+
+### -------------------------------------------------------------------------
+### 17. Traffic Simulator - Run All Test Scenarios (With Statement Verification)
 ### -------------------------------------------------------------------------
 # Run all one-off test scenarios for all registered banks (comparing expected ledger vs actual bank statement).
 POST {{hubUrl}}/swift/simulator/scenario/all
+Authorization: {{facilitatorAuth}}

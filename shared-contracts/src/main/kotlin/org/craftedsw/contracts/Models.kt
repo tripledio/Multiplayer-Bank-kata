@@ -162,11 +162,28 @@ data class LedgerResponse(
 )
 
 @Serializable
+data class ScenarioPhaseStatus(
+    val phase: String,
+    val running: Boolean,
+    val elapsedSeconds: Long,
+    val intervalSeconds: Long = 10,
+    val results: List<ScenarioResult> = emptyList()
+)
+
+@Serializable
+data class SimulatorPhasesStatusResponse(
+    val deposits: ScenarioPhaseStatus,
+    val withdrawals: ScenarioPhaseStatus,
+    val transfers: ScenarioPhaseStatus
+)
+
+@Serializable
 data class SimulatorStatusResponse(
     val status: String,
     val intervalMs: Long? = null,
     val count: Int? = null,
-    val results: List<ScenarioResult>? = null
+    val results: List<ScenarioResult>? = null,
+    val phases: SimulatorPhasesStatusResponse? = null
 )
 
 @Serializable

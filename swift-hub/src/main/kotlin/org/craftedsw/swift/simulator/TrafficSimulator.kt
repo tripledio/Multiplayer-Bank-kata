@@ -11,6 +11,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
@@ -22,9 +23,12 @@ import kotlinx.coroutines.launch
 import org.craftedsw.contracts.BalanceResponse
 import org.craftedsw.contracts.Bic
 import org.craftedsw.contracts.DepositRequest
+import org.craftedsw.contracts.ScenarioPhaseStatus
 import org.craftedsw.contracts.ScenarioResult
+import org.craftedsw.contracts.SimulatorPhasesStatusResponse
 import org.craftedsw.contracts.StatementResponse
 import org.craftedsw.contracts.TransferRequest
+import org.craftedsw.contracts.TransferStatus
 import org.craftedsw.contracts.WithdrawRequest
 import org.craftedsw.swift.router.BankRegistry
 import org.craftedsw.swift.router.TransferRouter
@@ -32,7 +36,9 @@ import org.slf4j.LoggerFactory
 
 enum class ScenarioTransactionType {
     DEPOSIT,
-    WITHDRAW
+    WITHDRAW,
+    TRANSFER_IN,
+    TRANSFER_OUT
 }
 
 data class ScenarioTransaction(
@@ -74,13 +80,33 @@ class ScenarioLedger(val iban: String) {
         return willSucceed
     }
 
+    fun recordTransferOut(amountCents: Long): Boolean {
+        val willSucceed = amountCents > 0 && expectedBalanceCents >= amountCents
+        transactions.add(ScenarioTransaction(ScenarioTransactionType.TRANSFER_OUT, amountCents, willSucceed))
+        if (willSucceed) {
+            expectedBalanceCents -= amountCents
+            shouldAccountExist = true
+        }
+        return willSucceed
+    }
+
+    fun recordTransferIn(amountCents: Long): Boolean {
+        val willSucceed = amountCents > 0
+        transactions.add(ScenarioTransaction(ScenarioTransactionType.TRANSFER_IN, amountCents, willSucceed))
+        if (willSucceed) {
+            expectedBalanceCents += amountCents
+            shouldAccountExist = true
+        }
+        return willSucceed
+    }
+
     fun getExpectedStatementLines(): List<ExpectedStatementLine> {
         val lines = mutableListOf<ExpectedStatementLine>()
         var runningBal = 0L
         for (tx in transactions) {
             if (!tx.expectedSuccess) continue
             when (tx.type) {
-                ScenarioTransactionType.DEPOSIT -> {
+                ScenarioTransactionType.DEPOSIT, ScenarioTransactionType.TRANSFER_IN -> {
                     runningBal += tx.amountCents
                     lines.add(
                         ExpectedStatementLine(
@@ -90,7 +116,7 @@ class ScenarioLedger(val iban: String) {
                         )
                     )
                 }
-                ScenarioTransactionType.WITHDRAW -> {
+                ScenarioTransactionType.WITHDRAW, ScenarioTransactionType.TRANSFER_OUT -> {
                     runningBal -= tx.amountCents
                     lines.add(
                         ExpectedStatementLine(
@@ -159,6 +185,25 @@ class TrafficSimulator(
     private val intervalMillis = AtomicLong(2000)
     private var job: Job? = null
 
+    // 3 Phase Runners
+    private val depositsRunning = AtomicBoolean(false)
+    private val depositsStartTime = AtomicLong(0)
+    private val depositsElapsedSeconds = AtomicLong(0)
+    private var depositsJob: Job? = null
+    private val depositsLatestResults = ConcurrentHashMap<String, List<ScenarioResult>>()
+
+    private val withdrawalsRunning = AtomicBoolean(false)
+    private val withdrawalsStartTime = AtomicLong(0)
+    private val withdrawalsElapsedSeconds = AtomicLong(0)
+    private var withdrawalsJob: Job? = null
+    private val withdrawalsLatestResults = ConcurrentHashMap<String, List<ScenarioResult>>()
+
+    private val transfersRunning = AtomicBoolean(false)
+    private val transfersStartTime = AtomicLong(0)
+    private val transfersElapsedSeconds = AtomicLong(0)
+    private var transfersJob: Job? = null
+    private val transfersLatestResults = ConcurrentHashMap<String, List<ScenarioResult>>()
+
     fun start(intervalMs: Long = 2000) {
         intervalMillis.set(intervalMs.coerceAtLeast(100))
         if (isRunning.compareAndSet(false, true)) {
@@ -183,6 +228,176 @@ class TrafficSimulator(
     fun isSimulatorRunning(): Boolean = isRunning.get()
 
     fun getIntervalMs(): Long = intervalMillis.get()
+
+    // --- Phase Controls & Status ---
+
+    fun togglePhase(phaseName: String): Boolean {
+        return when (phaseName.uppercase()) {
+            "DEPOSITS" -> {
+                if (depositsRunning.get()) {
+                    stopPhase("DEPOSITS")
+                    false
+                } else {
+                    startPhase("DEPOSITS")
+                    true
+                }
+            }
+            "WITHDRAWALS" -> {
+                if (withdrawalsRunning.get()) {
+                    stopPhase("WITHDRAWALS")
+                    false
+                } else {
+                    startPhase("WITHDRAWALS")
+                    true
+                }
+            }
+            "TRANSFERS" -> {
+                if (transfersRunning.get()) {
+                    stopPhase("TRANSFERS")
+                    false
+                } else {
+                    startPhase("TRANSFERS")
+                    true
+                }
+            }
+            else -> false
+        }
+    }
+
+    fun startPhase(phaseName: String) {
+        when (phaseName.uppercase()) {
+            "DEPOSITS" -> {
+                if (depositsRunning.compareAndSet(false, true)) {
+                    depositsStartTime.set(System.currentTimeMillis() - (depositsElapsedSeconds.get() * 1000L))
+                    depositsJob = scope.launch {
+                        while (isActive && depositsRunning.get()) {
+                            try {
+                                val results = runDepositsPhase()
+                                depositsLatestResults["LATEST"] = results
+                            } catch (e: Exception) {
+                                logger.error("Error executing Deposits phase: ${e.message}", e)
+                            }
+                            delay(10000L) // 10 seconds interval
+                        }
+                    }
+                }
+            }
+            "WITHDRAWALS" -> {
+                if (withdrawalsRunning.compareAndSet(false, true)) {
+                    withdrawalsStartTime.set(System.currentTimeMillis() - (withdrawalsElapsedSeconds.get() * 1000L))
+                    withdrawalsJob = scope.launch {
+                        while (isActive && withdrawalsRunning.get()) {
+                            try {
+                                val results = runWithdrawalsPhase()
+                                withdrawalsLatestResults["LATEST"] = results
+                            } catch (e: Exception) {
+                                logger.error("Error executing Withdrawals phase: ${e.message}", e)
+                            }
+                            delay(10000L) // 10 seconds interval
+                        }
+                    }
+                }
+            }
+            "TRANSFERS" -> {
+                if (transfersRunning.compareAndSet(false, true)) {
+                    transfersStartTime.set(System.currentTimeMillis() - (transfersElapsedSeconds.get() * 1000L))
+                    transfersJob = scope.launch {
+                        while (isActive && transfersRunning.get()) {
+                            try {
+                                val results = runTransfersPhase()
+                                transfersLatestResults["LATEST"] = results
+                            } catch (e: Exception) {
+                                logger.error("Error executing Transfers phase: ${e.message}", e)
+                            }
+                            delay(10000L) // 10 seconds interval
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun stopPhase(phaseName: String) {
+        when (phaseName.uppercase()) {
+            "DEPOSITS" -> {
+                if (depositsRunning.compareAndSet(true, false)) {
+                    val now = System.currentTimeMillis()
+                    depositsElapsedSeconds.set((now - depositsStartTime.get()) / 1000L)
+                    depositsJob?.cancel()
+                    depositsJob = null
+                }
+            }
+            "WITHDRAWALS" -> {
+                if (withdrawalsRunning.compareAndSet(true, false)) {
+                    val now = System.currentTimeMillis()
+                    withdrawalsElapsedSeconds.set((now - withdrawalsStartTime.get()) / 1000L)
+                    withdrawalsJob?.cancel()
+                    withdrawalsJob = null
+                }
+            }
+            "TRANSFERS" -> {
+                if (transfersRunning.compareAndSet(true, false)) {
+                    val now = System.currentTimeMillis()
+                    transfersElapsedSeconds.set((now - transfersStartTime.get()) / 1000L)
+                    transfersJob?.cancel()
+                    transfersJob = null
+                }
+            }
+        }
+    }
+
+    fun getPhasesStatus(): SimulatorPhasesStatusResponse {
+        val now = System.currentTimeMillis()
+        val depElapsed = if (depositsRunning.get()) (now - depositsStartTime.get()) / 1000L else depositsElapsedSeconds.get()
+        val withElapsed = if (withdrawalsRunning.get()) (now - withdrawalsStartTime.get()) / 1000L else withdrawalsElapsedSeconds.get()
+        val transElapsed = if (transfersRunning.get()) (now - transfersStartTime.get()) / 1000L else transfersElapsedSeconds.get()
+
+        return SimulatorPhasesStatusResponse(
+            deposits = ScenarioPhaseStatus(
+                phase = "DEPOSITS",
+                running = depositsRunning.get(),
+                elapsedSeconds = depElapsed.coerceAtLeast(0),
+                results = depositsLatestResults["LATEST"] ?: emptyList()
+            ),
+            withdrawals = ScenarioPhaseStatus(
+                phase = "WITHDRAWALS",
+                running = withdrawalsRunning.get(),
+                elapsedSeconds = withElapsed.coerceAtLeast(0),
+                results = withdrawalsLatestResults["LATEST"] ?: emptyList()
+            ),
+            transfers = ScenarioPhaseStatus(
+                phase = "TRANSFERS",
+                running = transfersRunning.get(),
+                elapsedSeconds = transElapsed.coerceAtLeast(0),
+                results = transfersLatestResults["LATEST"] ?: emptyList()
+            )
+        )
+    }
+
+    // --- Phase 1: Deposits ---
+    suspend fun runDepositsPhase(): List<ScenarioResult> {
+        val results = mutableListOf<ScenarioResult>()
+        results.addAll(runPositiveDepositScenario())
+        results.addAll(runNegativeDepositScenario())
+        return results
+    }
+
+    // --- Phase 2: Withdrawals ---
+    suspend fun runWithdrawalsPhase(): List<ScenarioResult> {
+        val results = mutableListOf<ScenarioResult>()
+        results.addAll(runPositiveWithdrawScenario())
+        results.addAll(runNegativeWithdrawScenario())
+        results.addAll(runOverdraftWithdrawScenario())
+        return results
+    }
+
+    // --- Phase 3: Transfers ---
+    suspend fun runTransfersPhase(): List<ScenarioResult> {
+        val results = mutableListOf<ScenarioResult>()
+        results.addAll(runIntraBankTransferScenario())
+        results.addAll(runCrossBankTransferScenario())
+        return results
+    }
 
     suspend fun triggerBurst(count: Int): Int {
         val banks = bankRegistry.getAllBanks()
@@ -216,7 +431,7 @@ class TrafficSimulator(
 
                 if (depositResponse.status != HttpStatusCode.OK) {
                     val errorBody = depositResponse.bodyAsText()
-                    bankRegistry.recordTransaction(Bic(bank.bic), false, -10L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
@@ -233,7 +448,7 @@ class TrafficSimulator(
 
                 val depositBody: BalanceResponse = depositResponse.body()
                 if (depositBody.balanceCents != depositAmountCents) {
-                    bankRegistry.recordTransaction(Bic(bank.bic), false, -10L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
@@ -254,7 +469,7 @@ class TrafficSimulator(
                 val actualStr = ScenarioLedger.formatActualSummary(statementResponse.status, statement)
 
                 if (statementResponse.status != HttpStatusCode.OK || statement == null) {
-                    bankRegistry.recordTransaction(Bic(bank.bic), false, -5L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
@@ -278,7 +493,7 @@ class TrafficSimulator(
                     }
 
                 if (statement.currentBalanceCents == depositAmountCents && linesMatch) {
-                    bankRegistry.recordTransaction(Bic(bank.bic), true, 20L, depositAmountCents)
+                    bankRegistry.recordTransaction(Bic(bank.bic), true, 1L, depositAmountCents)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
@@ -291,7 +506,7 @@ class TrafficSimulator(
                         )
                     )
                 } else {
-                    bankRegistry.recordTransaction(Bic(bank.bic), false, -10L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     val mismatchReason = if (statement.currentBalanceCents != depositAmountCents) {
                         "Expected statement balance $depositAmountCents cents, but got ${statement.currentBalanceCents} cents"
                     } else {
@@ -311,7 +526,7 @@ class TrafficSimulator(
                 }
             } catch (e: Exception) {
                 logger.warn("Positive deposit scenario failed for ${bank.name}: ${e.message}")
-                bankRegistry.recordTransaction(Bic(bank.bic), false, -10L)
+                bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                 results.add(
                     ScenarioResult(
                         bic = bank.bic,
@@ -350,7 +565,7 @@ class TrafficSimulator(
                 val receivedError = depositResponse.status != HttpStatusCode.OK
 
                 if (!receivedError) {
-                    bankRegistry.recordTransaction(Bic(bank.bic), false, -15L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
@@ -366,7 +581,6 @@ class TrafficSimulator(
                 }
 
                 // Verify that it doesn't end up with 0 euro in the account
-                // When an account was never created or deposit failed, querying statement should either return 400/404 or have no lines / not be an initialized 0 balance account.
                 val statementResponse: HttpResponse = httpClient.get("${bank.webhookUrl}/api/statement/$iban")
                 val statement: StatementResponse? = if (statementResponse.status == HttpStatusCode.OK) statementResponse.body() else null
                 val actualStr = ScenarioLedger.formatActualSummary(statementResponse.status, statement)
@@ -378,7 +592,7 @@ class TrafficSimulator(
                 }
 
                 if (accountHasZero) {
-                    bankRegistry.recordTransaction(Bic(bank.bic), false, -10L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
@@ -391,7 +605,7 @@ class TrafficSimulator(
                         )
                     )
                 } else {
-                    bankRegistry.recordTransaction(Bic(bank.bic), true, 20L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), true, 1L)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
@@ -406,7 +620,7 @@ class TrafficSimulator(
                 }
             } catch (e: Exception) {
                 logger.warn("Negative deposit scenario failed for ${bank.name}: ${e.message}")
-                bankRegistry.recordTransaction(Bic(bank.bic), false, -10L)
+                bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                 results.add(
                     ScenarioResult(
                         bic = bank.bic,
@@ -424,7 +638,8 @@ class TrafficSimulator(
         return results
     }
 
-    suspend fun runDepositWithdrawScenario(): List<ScenarioResult> {
+    // Phase 2: Happy withdrawal (Deposit 50 + Withdraw 20 -> balance 30)
+    suspend fun runPositiveWithdrawScenario(): List<ScenarioResult> {
         val banks = bankRegistry.getAllBanks()
         val results = mutableListOf<ScenarioResult>()
 
@@ -446,12 +661,12 @@ class TrafficSimulator(
 
                 if (depositResponse.status != HttpStatusCode.OK) {
                     val errorBody = depositResponse.bodyAsText()
-                    bankRegistry.recordTransaction(Bic(bank.bic), false, -10L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
-                            scenario = "DEPOSIT_50_WITHDRAW_20_EUR",
+                            scenario = "WITHDRAW_HAPPY_20_EUR",
                             passed = false,
                             message = "Initial deposit of 50.00 EUR failed with status ${depositResponse.status.value}: $errorBody",
                             expected = expectedStr,
@@ -469,12 +684,12 @@ class TrafficSimulator(
 
                 if (withdrawResponse.status != HttpStatusCode.OK) {
                     val errorBody = withdrawResponse.bodyAsText()
-                    bankRegistry.recordTransaction(Bic(bank.bic), false, -10L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
-                            scenario = "DEPOSIT_50_WITHDRAW_20_EUR",
+                            scenario = "WITHDRAW_HAPPY_20_EUR",
                             passed = false,
                             message = "Withdrawal of 20.00 EUR failed with status ${withdrawResponse.status.value}: $errorBody",
                             expected = expectedStr,
@@ -490,12 +705,12 @@ class TrafficSimulator(
                 val actualStr = ScenarioLedger.formatActualSummary(statementResponse.status, statement)
 
                 if (statementResponse.status != HttpStatusCode.OK || statement == null) {
-                    bankRegistry.recordTransaction(Bic(bank.bic), false, -5L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
-                            scenario = "DEPOSIT_50_WITHDRAW_20_EUR",
+                            scenario = "WITHDRAW_HAPPY_20_EUR",
                             passed = false,
                             message = "Statement query failed with status ${statementResponse.status.value}",
                             expected = expectedStr,
@@ -514,12 +729,12 @@ class TrafficSimulator(
                     }
 
                 if (statement.currentBalanceCents == ledger.expectedBalanceCents && linesMatch) {
-                    bankRegistry.recordTransaction(Bic(bank.bic), true, 25L, withdrawAmountCents)
+                    bankRegistry.recordTransaction(Bic(bank.bic), true, 1L, withdrawAmountCents)
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
-                            scenario = "DEPOSIT_50_WITHDRAW_20_EUR",
+                            scenario = "WITHDRAW_HAPPY_20_EUR",
                             passed = true,
                             message = "Successfully deposited 50.00 EUR, withdrew 20.00 EUR, and verified statement matched ledger",
                             expected = expectedStr,
@@ -527,7 +742,7 @@ class TrafficSimulator(
                         )
                     )
                 } else {
-                    bankRegistry.recordTransaction(Bic(bank.bic), false, -10L)
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     val mismatchReason = if (statement.currentBalanceCents != ledger.expectedBalanceCents) {
                         "Expected statement balance ${ledger.expectedBalanceCents} cents, but got ${statement.currentBalanceCents} cents"
                     } else {
@@ -537,7 +752,7 @@ class TrafficSimulator(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
-                            scenario = "DEPOSIT_50_WITHDRAW_20_EUR",
+                            scenario = "WITHDRAW_HAPPY_20_EUR",
                             passed = false,
                             message = mismatchReason,
                             expected = expectedStr,
@@ -547,12 +762,12 @@ class TrafficSimulator(
                 }
             } catch (e: Exception) {
                 logger.warn("Deposit & withdraw scenario failed for ${bank.name}: ${e.message}")
-                bankRegistry.recordTransaction(Bic(bank.bic), false, -10L)
+                bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                 results.add(
                     ScenarioResult(
                         bic = bank.bic,
                         bankName = bank.name,
-                        scenario = "DEPOSIT_50_WITHDRAW_20_EUR",
+                        scenario = "WITHDRAW_HAPPY_20_EUR",
                         passed = false,
                         message = "Exception during test: ${e.message}",
                         expected = expectedStr,
@@ -565,16 +780,509 @@ class TrafficSimulator(
         return results
     }
 
+    // Phase 2: Failure withdrawal - negative amount (-50 EUR) should fail and not create money
+    suspend fun runNegativeWithdrawScenario(): List<ScenarioResult> {
+        val banks = bankRegistry.getAllBanks()
+        val results = mutableListOf<ScenarioResult>()
+
+        for (bank in banks) {
+            val iban = "BE68${bank.bic}000${(1000000..9999999).random()}"
+            val ledger = ScenarioLedger(iban)
+            val negativeWithdrawAmountCents = -5000L // -50.00 EUR
+            ledger.recordWithdraw(negativeWithdrawAmountCents)
+            val expectedStr = ledger.formatExpectedSummary()
+
+            try {
+                val withdrawResponse: HttpResponse = httpClient.post("${bank.webhookUrl}/api/withdraw") {
+                    contentType(ContentType.Application.Json)
+                    setBody(WithdrawRequest(iban = iban, amountCents = negativeWithdrawAmountCents))
+                }
+
+                val receivedError = withdrawResponse.status != HttpStatusCode.OK
+
+                if (!receivedError) {
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "WITHDRAW_NEGATIVE_50_EUR",
+                            passed = false,
+                            message = "Expected bank to reject negative withdrawal, but received 200 OK",
+                            expected = expectedStr,
+                            actual = "Actual: Withdrawal accepted with HTTP 200 OK"
+                        )
+                    )
+                    continue
+                }
+
+                val statementResponse: HttpResponse = httpClient.get("${bank.webhookUrl}/api/statement/$iban")
+                val statement: StatementResponse? = if (statementResponse.status == HttpStatusCode.OK) statementResponse.body() else null
+                val actualStr = ScenarioLedger.formatActualSummary(statementResponse.status, statement)
+
+                val accountHasPositive = if (statement != null) {
+                    statement.currentBalanceCents > 0L
+                } else {
+                    false
+                }
+
+                if (accountHasPositive) {
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "WITHDRAW_NEGATIVE_50_EUR",
+                            passed = false,
+                            message = "Negative withdrawal created positive balance on account",
+                            expected = expectedStr,
+                            actual = actualStr
+                        )
+                    )
+                } else {
+                    bankRegistry.recordTransaction(Bic(bank.bic), true, 1L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "WITHDRAW_NEGATIVE_50_EUR",
+                            passed = true,
+                            message = "Central service received expected error (${withdrawResponse.status.value}) and no positive balance was created",
+                            expected = expectedStr,
+                            actual = "Actual: HTTP ${withdrawResponse.status.value} (Rejected) | Statement: ${if (statement == null) "HTTP ${statementResponse.status.value}" else "${statement.lines.size} lines"}"
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                logger.warn("Negative withdraw scenario failed for ${bank.name}: ${e.message}")
+                bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                results.add(
+                    ScenarioResult(
+                        bic = bank.bic,
+                        bankName = bank.name,
+                        scenario = "WITHDRAW_NEGATIVE_50_EUR",
+                        passed = false,
+                        message = "Exception during test: ${e.message}",
+                        expected = expectedStr,
+                        actual = "Actual: Exception: ${e.message}"
+                    )
+                )
+            }
+        }
+
+        return results
+    }
+
+    // Phase 2: Failure withdrawal - withdraw more than is on account (Deposit 20 EUR + Withdraw 50 EUR -> should fail)
+    suspend fun runOverdraftWithdrawScenario(): List<ScenarioResult> {
+        val banks = bankRegistry.getAllBanks()
+        val results = mutableListOf<ScenarioResult>()
+
+        for (bank in banks) {
+            val iban = "BE68${bank.bic}000${(1000000..9999999).random()}"
+            val ledger = ScenarioLedger(iban)
+            val depositAmountCents = 2000L // 20.00 EUR
+            val overWithdrawAmountCents = 5000L // 50.00 EUR
+            ledger.recordDeposit(depositAmountCents)
+            ledger.recordWithdraw(overWithdrawAmountCents) // Expected to fail, so expected balance remains 20 EUR
+            val expectedStr = ledger.formatExpectedSummary()
+
+            try {
+                // 1. Initial deposit of 20 EUR
+                val depositResponse: HttpResponse = httpClient.post("${bank.webhookUrl}/api/deposit") {
+                    contentType(ContentType.Application.Json)
+                    setBody(DepositRequest(iban = iban, amountCents = depositAmountCents))
+                }
+
+                if (depositResponse.status != HttpStatusCode.OK) {
+                    val errorBody = depositResponse.bodyAsText()
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                            passed = false,
+                            message = "Initial deposit of 20.00 EUR failed: $errorBody",
+                            expected = expectedStr,
+                            actual = "Actual: Deposit HTTP ${depositResponse.status.value}"
+                        )
+                    )
+                    continue
+                }
+
+                // 2. Withdraw 50 EUR (should be rejected)
+                val withdrawResponse: HttpResponse = httpClient.post("${bank.webhookUrl}/api/withdraw") {
+                    contentType(ContentType.Application.Json)
+                    setBody(WithdrawRequest(iban = iban, amountCents = overWithdrawAmountCents))
+                }
+
+                val receivedError = withdrawResponse.status != HttpStatusCode.OK
+
+                if (!receivedError) {
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                            passed = false,
+                            message = "Expected bank to reject withdrawal of 50.00 EUR when balance is 20.00 EUR, but received 200 OK",
+                            expected = expectedStr,
+                            actual = "Actual: Withdrawal accepted with HTTP 200 OK"
+                        )
+                    )
+                    continue
+                }
+
+                // 3. Verify balance remains 20 EUR
+                val statementResponse: HttpResponse = httpClient.get("${bank.webhookUrl}/api/statement/$iban")
+                val statement: StatementResponse? = if (statementResponse.status == HttpStatusCode.OK) statementResponse.body() else null
+                val actualStr = ScenarioLedger.formatActualSummary(statementResponse.status, statement)
+
+                if (statement != null && statement.currentBalanceCents == depositAmountCents) {
+                    bankRegistry.recordTransaction(Bic(bank.bic), true, 1L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                            passed = true,
+                            message = "Central service received expected error (${withdrawResponse.status.value}) and balance remained intact at 20.00 EUR",
+                            expected = expectedStr,
+                            actual = actualStr
+                        )
+                    )
+                } else {
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                            passed = false,
+                            message = "Withdrawal was rejected but statement balance changed from 20.00 EUR",
+                            expected = expectedStr,
+                            actual = actualStr
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                logger.warn("Overdraft withdraw scenario failed for ${bank.name}: ${e.message}")
+                bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                results.add(
+                    ScenarioResult(
+                        bic = bank.bic,
+                        bankName = bank.name,
+                        scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                        passed = false,
+                        message = "Exception during test: ${e.message}",
+                        expected = expectedStr,
+                        actual = "Actual: Exception: ${e.message}"
+                    )
+                )
+            }
+        }
+
+        return results
+    }
+
+    // Phase 3: Intra-bank transfer (within same bank between 2 IBANs)
+    suspend fun runIntraBankTransferScenario(): List<ScenarioResult> {
+        val banks = bankRegistry.getAllBanks()
+        val results = mutableListOf<ScenarioResult>()
+
+        for (bank in banks) {
+            val ibanFrom = "BE68${bank.bic}000${(1000000..4999999).random()}"
+            val ibanTo = "BE68${bank.bic}000${(5000000..9999999).random()}"
+            val initialDepositCents = 5000L // 50.00 EUR
+            val transferAmountCents = 2000L // 20.00 EUR
+
+            val ledgerFrom = ScenarioLedger(ibanFrom)
+            ledgerFrom.recordDeposit(initialDepositCents)
+            ledgerFrom.recordTransferOut(transferAmountCents)
+
+            val ledgerTo = ScenarioLedger(ibanTo)
+            ledgerTo.recordTransferIn(transferAmountCents)
+
+            val expectedStr = "From: ${ledgerFrom.formatExpectedSummary()} | To: ${ledgerTo.formatExpectedSummary()}"
+
+            try {
+                // 1. Deposit 50 EUR to from-account
+                val depositResponse: HttpResponse = httpClient.post("${bank.webhookUrl}/api/deposit") {
+                    contentType(ContentType.Application.Json)
+                    setBody(DepositRequest(iban = ibanFrom, amountCents = initialDepositCents))
+                }
+
+                if (depositResponse.status != HttpStatusCode.OK) {
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "INTRA_BANK_TRANSFER",
+                            passed = false,
+                            message = "Initial deposit to sender IBAN failed: ${depositResponse.status.value}",
+                            expected = expectedStr,
+                            actual = "Actual: Deposit HTTP ${depositResponse.status.value}"
+                        )
+                    )
+                    continue
+                }
+
+                // 2. Perform transfer from IBAN1 to IBAN2 (Intra-bank transfer)
+                // We use transfer-out on bank or transfer-in directly
+                val transferRequest = TransferRequest(
+                    transactionId = "intra-${System.currentTimeMillis()}-${(100..999).random()}",
+                    fromIban = ibanFrom,
+                    toIban = ibanTo,
+                    amountCents = transferAmountCents,
+                    timestamp = Instant.now().toString(),
+                    reference = "Intra-bank test transfer"
+                )
+
+                // Debit sender via withdraw and credit receiver via transfer-in/deposit
+                val withdrawSenderResponse: HttpResponse = httpClient.post("${bank.webhookUrl}/api/withdraw") {
+                    contentType(ContentType.Application.Json)
+                    setBody(WithdrawRequest(iban = ibanFrom, amountCents = transferAmountCents))
+                }
+
+                val transferInReceiverResponse: HttpResponse = httpClient.post("${bank.webhookUrl}/api/transfer-in") {
+                    contentType(ContentType.Application.Json)
+                    setBody(transferRequest)
+                }
+
+                if (withdrawSenderResponse.status != HttpStatusCode.OK || transferInReceiverResponse.status != HttpStatusCode.OK) {
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "INTRA_BANK_TRANSFER",
+                            passed = false,
+                            message = "Intra-bank transfer failed: Sender debit status=${withdrawSenderResponse.status.value}, Receiver credit status=${transferInReceiverResponse.status.value}",
+                            expected = expectedStr,
+                            actual = "Actual: Debit HTTP ${withdrawSenderResponse.status.value}, Credit HTTP ${transferInReceiverResponse.status.value}"
+                        )
+                    )
+                    continue
+                }
+
+                // 3. Verify sender and receiver statements and balances
+                val stmtFromResp: HttpResponse = httpClient.get("${bank.webhookUrl}/api/statement/$ibanFrom")
+                val stmtToResp: HttpResponse = httpClient.get("${bank.webhookUrl}/api/statement/$ibanTo")
+
+                val stmtFrom: StatementResponse? = if (stmtFromResp.status == HttpStatusCode.OK) stmtFromResp.body() else null
+                val stmtTo: StatementResponse? = if (stmtToResp.status == HttpStatusCode.OK) stmtToResp.body() else null
+
+                val actualStr = "From: ${ScenarioLedger.formatActualSummary(stmtFromResp.status, stmtFrom)} | To: ${ScenarioLedger.formatActualSummary(stmtToResp.status, stmtTo)}"
+
+                val fromOk = stmtFrom != null && stmtFrom.currentBalanceCents == ledgerFrom.expectedBalanceCents
+                val toOk = stmtTo != null && stmtTo.currentBalanceCents == ledgerTo.expectedBalanceCents
+
+                if (fromOk && toOk) {
+                    bankRegistry.recordTransaction(Bic(bank.bic), true, 1L, transferAmountCents)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "INTRA_BANK_TRANSFER",
+                            passed = true,
+                            message = "Intra-bank transfer successfully updated both accounts (Sender balance: 30.00 EUR, Receiver balance: 20.00 EUR)",
+                            expected = expectedStr,
+                            actual = actualStr
+                        )
+                    )
+                } else {
+                    bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bank.bic,
+                            bankName = bank.name,
+                            scenario = "INTRA_BANK_TRANSFER",
+                            passed = false,
+                            message = "Intra-bank transfer verification failed: FromBalance=${stmtFrom?.currentBalanceCents} (expected ${ledgerFrom.expectedBalanceCents}), ToBalance=${stmtTo?.currentBalanceCents} (expected ${ledgerTo.expectedBalanceCents})",
+                            expected = expectedStr,
+                            actual = actualStr
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                logger.warn("Intra-bank transfer scenario failed for ${bank.name}: ${e.message}")
+                bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                results.add(
+                    ScenarioResult(
+                        bic = bank.bic,
+                        bankName = bank.name,
+                        scenario = "INTRA_BANK_TRANSFER",
+                        passed = false,
+                        message = "Exception during test: ${e.message}",
+                        expected = expectedStr,
+                        actual = "Actual: Exception: ${e.message}"
+                    )
+                )
+            }
+        }
+
+        return results
+    }
+
+    // Phase 3: Inter-bank transfer (cross-bank over SWIFT Hub)
+    suspend fun runCrossBankTransferScenario(): List<ScenarioResult> {
+        val banks = bankRegistry.getAllBanks()
+        val results = mutableListOf<ScenarioResult>()
+
+        if (banks.isEmpty()) return results
+
+        for (bankA in banks) {
+            // Find another registered bank or use self if only 1 bank is registered
+            val bankB = banks.firstOrNull { it.bic != bankA.bic } ?: bankA
+
+            val ibanFrom = "BE68${bankA.bic}000${(1000000..4999999).random()}"
+            val ibanTo = "BE68${bankB.bic}000${(5000000..9999999).random()}"
+            val initialDepositCents = 5000L // 50.00 EUR
+            val transferAmountCents = 2000L // 20.00 EUR
+
+            val ledgerFrom = ScenarioLedger(ibanFrom)
+            ledgerFrom.recordDeposit(initialDepositCents)
+            ledgerFrom.recordTransferOut(transferAmountCents)
+
+            val ledgerTo = ScenarioLedger(ibanTo)
+            ledgerTo.recordTransferIn(transferAmountCents)
+
+            val expectedStr = "From (${bankA.bic}): ${ledgerFrom.formatExpectedSummary()} | To (${bankB.bic}): ${ledgerTo.formatExpectedSummary()}"
+
+            try {
+                // 1. Deposit 50 EUR to Bank A
+                val depositResponse: HttpResponse = httpClient.post("${bankA.webhookUrl}/api/deposit") {
+                    contentType(ContentType.Application.Json)
+                    setBody(DepositRequest(iban = ibanFrom, amountCents = initialDepositCents))
+                }
+
+                if (depositResponse.status != HttpStatusCode.OK) {
+                    bankRegistry.recordTransaction(Bic(bankA.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bankA.bic,
+                            bankName = bankA.name,
+                            scenario = "CROSS_BANK_TRANSFER",
+                            passed = false,
+                            message = "Initial deposit to sender IBAN at ${bankA.name} failed: ${depositResponse.status.value}",
+                            expected = expectedStr,
+                            actual = "Actual: Deposit HTTP ${depositResponse.status.value}"
+                        )
+                    )
+                    continue
+                }
+
+                // 2. Perform cross-bank transfer via SWIFT Router
+                val transferRequest = TransferRequest(
+                    transactionId = "swift-${System.currentTimeMillis()}-${(100..999).random()}",
+                    fromIban = ibanFrom,
+                    toIban = ibanTo,
+                    amountCents = transferAmountCents,
+                    timestamp = Instant.now().toString(),
+                    reference = "Cross-bank test transfer"
+                )
+
+                // Debit sender Bank A via withdraw
+                val withdrawSenderResponse: HttpResponse = httpClient.post("${bankA.webhookUrl}/api/withdraw") {
+                    contentType(ContentType.Application.Json)
+                    setBody(WithdrawRequest(iban = ibanFrom, amountCents = transferAmountCents))
+                }
+
+                // Route through SWIFT hub router to Bank B
+                val routerResult = transferRouter.routeTransfer(transferRequest)
+
+                if (withdrawSenderResponse.status != HttpStatusCode.OK || routerResult.status != TransferStatus.ACCEPTED) {
+                    bankRegistry.recordTransaction(Bic(bankA.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bankA.bic,
+                            bankName = bankA.name,
+                            scenario = "CROSS_BANK_TRANSFER",
+                            passed = false,
+                            message = "Cross-bank transfer routing failed: Debit status=${withdrawSenderResponse.status.value}, Router status=${routerResult.status} (${routerResult.message})",
+                            expected = expectedStr,
+                            actual = "Actual: Debit HTTP ${withdrawSenderResponse.status.value}, SWIFT Router: ${routerResult.status}"
+                        )
+                    )
+                    continue
+                }
+
+                // 3. Verify Bank A and Bank B statements and balances
+                val stmtFromResp: HttpResponse = httpClient.get("${bankA.webhookUrl}/api/statement/$ibanFrom")
+                val stmtToResp: HttpResponse = httpClient.get("${bankB.webhookUrl}/api/statement/$ibanTo")
+
+                val stmtFrom: StatementResponse? = if (stmtFromResp.status == HttpStatusCode.OK) stmtFromResp.body() else null
+                val stmtTo: StatementResponse? = if (stmtToResp.status == HttpStatusCode.OK) stmtToResp.body() else null
+
+                val actualStr = "From (${bankA.bic}): ${ScenarioLedger.formatActualSummary(stmtFromResp.status, stmtFrom)} | To (${bankB.bic}): ${ScenarioLedger.formatActualSummary(stmtToResp.status, stmtTo)}"
+
+                val fromOk = stmtFrom != null && stmtFrom.currentBalanceCents == ledgerFrom.expectedBalanceCents
+                val toOk = stmtTo != null && stmtTo.currentBalanceCents == ledgerTo.expectedBalanceCents
+
+                if (fromOk && toOk) {
+                    bankRegistry.recordTransaction(Bic(bankA.bic), true, 1L, transferAmountCents)
+                    results.add(
+                        ScenarioResult(
+                            bic = bankA.bic,
+                            bankName = bankA.name,
+                            scenario = "CROSS_BANK_TRANSFER",
+                            passed = true,
+                            message = "Cross-bank transfer over SWIFT Hub successfully settled (${bankA.bic} sender balance: 30.00 EUR, ${bankB.bic} receiver balance: 20.00 EUR)",
+                            expected = expectedStr,
+                            actual = actualStr
+                        )
+                    )
+                } else {
+                    bankRegistry.recordTransaction(Bic(bankA.bic), false, 0L)
+                    results.add(
+                        ScenarioResult(
+                            bic = bankA.bic,
+                            bankName = bankA.name,
+                            scenario = "CROSS_BANK_TRANSFER",
+                            passed = false,
+                            message = "Cross-bank transfer verification failed: FromBalance=${stmtFrom?.currentBalanceCents} (expected ${ledgerFrom.expectedBalanceCents}), ToBalance=${stmtTo?.currentBalanceCents} (expected ${ledgerTo.expectedBalanceCents})",
+                            expected = expectedStr,
+                            actual = actualStr
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                logger.warn("Cross-bank transfer scenario failed for ${bankA.name}: ${e.message}")
+                bankRegistry.recordTransaction(Bic(bankA.bic), false, 0L)
+                results.add(
+                    ScenarioResult(
+                        bic = bankA.bic,
+                        bankName = bankA.name,
+                        scenario = "CROSS_BANK_TRANSFER",
+                        passed = false,
+                        message = "Exception during test: ${e.message}",
+                        expected = expectedStr,
+                        actual = "Actual: Exception: ${e.message}"
+                    )
+                )
+            }
+        }
+
+        return results
+    }
+
+    suspend fun runDepositWithdrawScenario(): List<ScenarioResult> {
+        return runPositiveWithdrawScenario()
+    }
+
     suspend fun runAllScenarios(): List<ScenarioResult> {
         val results = mutableListOf<ScenarioResult>()
-        results.addAll(runPositiveDepositScenario())
-        results.addAll(runNegativeDepositScenario())
-        results.addAll(runDepositWithdrawScenario())
+        results.addAll(runDepositsPhase())
+        results.addAll(runWithdrawalsPhase())
+        results.addAll(runTransfersPhase())
         return results
     }
 
     suspend fun runAllDepositScenarios(): List<ScenarioResult> {
-        return runAllScenarios()
+        return runDepositsPhase()
     }
 
     suspend fun simulateSingleTransfer(): Boolean {

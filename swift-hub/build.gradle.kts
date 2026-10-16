@@ -28,6 +28,7 @@ dependencies {
     implementation("io.ktor:ktor-server-websockets:$ktorVersion")
     implementation("io.ktor:ktor-server-sse:$ktorVersion")
     implementation("io.ktor:ktor-server-html-builder:$ktorVersion")
+    implementation("io.ktor:ktor-server-auth:$ktorVersion")
 
     // Ktor Client (for dispatching to participant banks)
     implementation("io.ktor:ktor-client-core:$ktorVersion")

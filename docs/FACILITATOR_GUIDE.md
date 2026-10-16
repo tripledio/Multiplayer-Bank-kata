@@ -41,6 +41,15 @@ http://localhost:9000
 ```
 Connect your laptop to the projector or shared conference stream.
 
+> **🔐 Facilitator Authentication**:
+> Access to the Facilitator Scoreboard (`/`, `/scoreboard`, and simulator controls) is protected with HTTP Basic Authentication to prevent unauthorized public access when running on a shared network or public tunnel.
+> The registration page (`/register`, `/swift/register`) and transfer endpoints remain open to all participant banks.
+>
+> Configure credentials using environment variables (defaults to `admin` / `admin`):
+> - `FACILITATOR_PASSWORD=your_password` (username and password can be the same)
+> - `FACILITATOR_AUTH=user:password` or `FACILITATOR_AUTH=single_secret`
+> - `FACILITATOR_USERNAME=admin` and `FACILITATOR_PASSWORD=secret`
+
 ### 3. Share Your Local IP / Tunnel URL
 Ensure attendees know your machine's IP address on the local WiFi network (or expose the SWIFT Hub via `npx localtunnel --port 9000` so attendees can reach it over HTTPS):
 ```bash

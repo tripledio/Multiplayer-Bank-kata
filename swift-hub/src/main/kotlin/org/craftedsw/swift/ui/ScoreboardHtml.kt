@@ -101,22 +101,101 @@ object ScoreboardHtml {
                     </div>
                 </div>
 
-                <!-- Facilitator Controls -->
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>⚡ Facilitator Simulation Controls</span>
-                        <span id="simStatus" class="badge bg-secondary">Simulator: Idle</span>
+                <!-- 3 Test Phases Control Center -->
+                <div class="card mb-4 border-info">
+                    <div class="card-header bg-dark bg-gradient d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="fs-5 fw-bold text-white">🧪 Test Simulator Phase Controllers</span>
+                            <span class="text-secondary small ms-2">• Evaluates registered banks every 10s • 1 point per scenario</span>
+                        </div>
+                        <div class="d-flex gap-2 align-items-center">
+                            <span id="simStatus" class="badge bg-secondary">Traffic: Idle</span>
+                            <button id="btnToggleSim" class="btn btn-sm btn-outline-secondary" onclick="toggleSim()">⚡ Background Traffic</button>
+                        </div>
                     </div>
                     <div class="card-body">
-                        <div class="d-flex flex-wrap gap-2 align-items-center">
-                            <button id="btnToggleSim" class="btn btn-success btn-control" onclick="toggleSim()">▶ Start Traffic Sim</button>
-                            <button class="btn btn-primary btn-control" onclick="triggerBurst(5)">⚡ Fire 5 Tx Burst</button>
-                            <button class="btn btn-warning btn-control" onclick="triggerBurst(20)">💥 Fire 20 Tx Surge</button>
-                            <button class="btn btn-outline-info btn-control" onclick="runDepositScenario('deposit-positive')">🧪 Test +50€ Deposit</button>
-                            <button class="btn btn-outline-danger btn-control" onclick="runDepositScenario('deposit-negative')">🧪 Test -50€ Deposit</button>
-                            <button class="btn btn-outline-warning btn-control" onclick="runDepositScenario('withdraw')">🧪 Test Deposit & Withdraw</button>
-                            <button class="btn btn-outline-light btn-control" onclick="runDepositScenario('all')">🧪 Run All Scenarios</button>
+                        <div class="row g-3">
+                            <!-- Phase 1: Deposits Column -->
+                            <div class="col-md-4">
+                                <div class="card h-100 bg-black bg-opacity-25 border-secondary">
+                                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                                        <div>
+                                            <span class="fw-bold text-info">1. Deposits</span>
+                                            <div class="small text-secondary" style="font-size: 0.75rem;">+50€ &amp; -50€ Rejection</div>
+                                        </div>
+                                        <span id="phaseTimerDeposits" class="badge bg-dark border border-info font-monospace text-info">00:00</span>
+                                    </div>
+                                    <div class="card-body d-flex flex-column p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <button id="btnPhaseDeposits" class="btn btn-sm btn-success fw-bold px-3" onclick="togglePhase('DEPOSITS')">▶ Play</button>
+                                            <button class="btn btn-sm btn-outline-info" onclick="runDepositScenario('deposit')">⚡ Run Now</button>
+                                        </div>
+                                        <div class="small text-secondary mb-2" id="phaseDescDeposits">
+                                            • Deposit 50 EUR (Assert 50€ &amp; statement)<br>
+                                            • Deposit -50 EUR (Assert error &amp; no 0€)
+                                        </div>
+                                        <div id="phaseResultsDeposits" class="mt-auto border-top border-secondary pt-2 small text-secondary">
+                                            <em>Awaiting first evaluation...</em>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Phase 2: Withdrawals Column -->
+                            <div class="col-md-4">
+                                <div class="card h-100 bg-black bg-opacity-25 border-secondary">
+                                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                                        <div>
+                                            <span class="fw-bold text-warning">2. Withdrawals</span>
+                                            <div class="small text-secondary" style="font-size: 0.75rem;">Happy, Negative, Overdraft</div>
+                                        </div>
+                                        <span id="phaseTimerWithdrawals" class="badge bg-dark border border-warning font-monospace text-warning">00:00</span>
+                                    </div>
+                                    <div class="card-body d-flex flex-column p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <button id="btnPhaseWithdrawals" class="btn btn-sm btn-success fw-bold px-3" onclick="togglePhase('WITHDRAWALS')">▶ Play</button>
+                                            <button class="btn btn-sm btn-outline-warning" onclick="runDepositScenario('withdraw')">⚡ Run Now</button>
+                                        </div>
+                                        <div class="small text-secondary mb-2" id="phaseDescWithdrawals">
+                                            • Deposit 50€ + Withdraw 20€ (Happy)<br>
+                                            • Withdraw -50 EUR (Assert rejection)<br>
+                                            • Withdraw > balance (Assert rejection)
+                                        </div>
+                                        <div id="phaseResultsWithdrawals" class="mt-auto border-top border-secondary pt-2 small text-secondary">
+                                            <em>Awaiting first evaluation...</em>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Phase 3: Transfers Column -->
+                            <div class="col-md-4">
+                                <div class="card h-100 bg-black bg-opacity-25 border-secondary">
+                                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                                        <div>
+                                            <span class="fw-bold text-primary">3. Transfers</span>
+                                            <div class="small text-secondary" style="font-size: 0.75rem;">Intra-Bank &amp; Cross-Bank</div>
+                                        </div>
+                                        <span id="phaseTimerTransfers" class="badge bg-dark border border-primary font-monospace text-primary">00:00</span>
+                                    </div>
+                                    <div class="card-body d-flex flex-column p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <button id="btnPhaseTransfers" class="btn btn-sm btn-success fw-bold px-3" onclick="togglePhase('TRANSFERS')">▶ Play</button>
+                                            <button class="btn btn-sm btn-outline-primary" onclick="runDepositScenario('transfer')">⚡ Run Now</button>
+                                        </div>
+                                        <div class="small text-secondary mb-2" id="phaseDescTransfers">
+                                            • Intra-Bank transfer within bank<br>
+                                            • Cross-Bank transfer via SWIFT Hub
+                                        </div>
+                                        <div id="phaseResultsTransfers" class="mt-auto border-top border-secondary pt-2 small text-secondary">
+                                            <em>Awaiting first evaluation...</em>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+
+                        <!-- Manual Scenario Detailed Results Box -->
                         <div id="scenarioResultBox" class="mt-3 d-none">
                             <div class="alert alert-dark border-secondary mb-0 p-3" role="alert">
                                 <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
@@ -597,10 +676,115 @@ object ScoreboardHtml {
             }
         }
 
+        function formatElapsed(seconds) {
+            const sec = Math.max(0, parseInt(seconds || 0, 10));
+            const mins = Math.floor(sec / 60);
+            const remainingSecs = sec % 60;
+            return String(mins).padStart(2, '0') + ':' + String(remainingSecs).padStart(2, '0');
+        }
+
+        async function togglePhase(phaseName) {
+            try {
+                const res = await fetch('/swift/simulator/phase/' + phaseName.toLowerCase() + '/toggle', { method: 'POST' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.phases) renderPhases(data.phases);
+                }
+            } catch (err) {
+                console.error('Failed to toggle phase ' + phaseName, err);
+            }
+        }
+
+        function renderPhases(phases) {
+            if (!phases) return;
+
+            // Deposits
+            const dep = phases.deposits || {};
+            const depBtn = document.getElementById('btnPhaseDeposits');
+            const depTimer = document.getElementById('phaseTimerDeposits');
+            const depResults = document.getElementById('phaseResultsDeposits');
+            if (depBtn) {
+                depBtn.innerText = dep.running ? '⏸ Pause' : '▶ Play';
+                depBtn.className = dep.running ? 'btn btn-sm btn-danger fw-bold px-3' : 'btn btn-sm btn-success fw-bold px-3';
+            }
+            if (depTimer) {
+                depTimer.innerText = formatElapsed(dep.elapsedSeconds);
+            }
+            if (depResults && dep.results && dep.results.length > 0) {
+                const passedCount = dep.results.filter(r => r.passed).length;
+                const totalCount = dep.results.length;
+                depResults.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-semibold text-light">Last Run:</span>
+                        <span class="badge ${'$'}{passedCount === totalCount ? 'bg-success' : 'bg-warning text-dark'}">${'$'}{passedCount}/${'$'}{totalCount} Passed (+${'$'}{passedCount} pts)</span>
+                    </div>
+                    <div class="font-monospace text-secondary" style="font-size: 0.72rem; max-height: 120px; overflow-y: auto;">
+                        ${'$'}{dep.results.map(r => `<div><span class="${'$'}{r.passed ? 'text-success' : 'text-danger'}">${'$'}{r.passed ? '✓' : '✗'}</span> ${'$'}{escapeHtml(r.bic)} - ${'$'}{escapeHtml(r.scenario)}</div>`).join('')}
+                    </div>
+                `;
+            }
+
+            // Withdrawals
+            const withDr = phases.withdrawals || {};
+            const withBtn = document.getElementById('btnPhaseWithdrawals');
+            const withTimer = document.getElementById('phaseTimerWithdrawals');
+            const withResults = document.getElementById('phaseResultsWithdrawals');
+            if (withBtn) {
+                withBtn.innerText = withDr.running ? '⏸ Pause' : '▶ Play';
+                withBtn.className = withDr.running ? 'btn btn-sm btn-danger fw-bold px-3' : 'btn btn-sm btn-success fw-bold px-3';
+            }
+            if (withTimer) {
+                withTimer.innerText = formatElapsed(withDr.elapsedSeconds);
+            }
+            if (withResults && withDr.results && withDr.results.length > 0) {
+                const passedCount = withDr.results.filter(r => r.passed).length;
+                const totalCount = withDr.results.length;
+                withResults.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-semibold text-light">Last Run:</span>
+                        <span class="badge ${'$'}{passedCount === totalCount ? 'bg-success' : 'bg-warning text-dark'}">${'$'}{passedCount}/${'$'}{totalCount} Passed (+${'$'}{passedCount} pts)</span>
+                    </div>
+                    <div class="font-monospace text-secondary" style="font-size: 0.72rem; max-height: 120px; overflow-y: auto;">
+                        ${'$'}{withDr.results.map(r => `<div><span class="${'$'}{r.passed ? 'text-success' : 'text-danger'}">${'$'}{r.passed ? '✓' : '✗'}</span> ${'$'}{escapeHtml(r.bic)} - ${'$'}{escapeHtml(r.scenario)}</div>`).join('')}
+                    </div>
+                `;
+            }
+
+            // Transfers
+            const trans = phases.transfers || {};
+            const transBtn = document.getElementById('btnPhaseTransfers');
+            const transTimer = document.getElementById('phaseTimerTransfers');
+            const transResults = document.getElementById('phaseResultsTransfers');
+            if (transBtn) {
+                transBtn.innerText = trans.running ? '⏸ Pause' : '▶ Play';
+                transBtn.className = trans.running ? 'btn btn-sm btn-danger fw-bold px-3' : 'btn btn-sm btn-success fw-bold px-3';
+            }
+            if (transTimer) {
+                transTimer.innerText = formatElapsed(trans.elapsedSeconds);
+            }
+            if (transResults && trans.results && trans.results.length > 0) {
+                const passedCount = trans.results.filter(r => r.passed).length;
+                const totalCount = trans.results.length;
+                transResults.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-semibold text-light">Last Run:</span>
+                        <span class="badge ${'$'}{passedCount === totalCount ? 'bg-success' : 'bg-warning text-dark'}">${'$'}{passedCount}/${'$'}{totalCount} Passed (+${'$'}{passedCount} pts)</span>
+                    </div>
+                    <div class="font-monospace text-secondary" style="font-size: 0.72rem; max-height: 120px; overflow-y: auto;">
+                        ${'$'}{trans.results.map(r => `<div><span class="${'$'}{r.passed ? 'text-success' : 'text-danger'}">${'$'}{r.passed ? '✓' : '✗'}</span> ${'$'}{escapeHtml(r.bic)} - ${'$'}{escapeHtml(r.scenario)}</div>`).join('')}
+                    </div>
+                `;
+            }
+        }
+
         async function pollSimStatus() {
             try {
                 const res = await fetch('/swift/simulator/status');
-                if (res.ok) renderSimStatus(await res.json());
+                if (res.ok) {
+                    const data = await res.json();
+                    renderSimStatus(data);
+                    if (data.phases) renderPhases(data.phases);
+                }
             } catch (err) {
                 console.error('Failed to fetch simulator status', err);
             }

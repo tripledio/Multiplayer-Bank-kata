@@ -5,6 +5,10 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.application.install
+import io.ktor.server.auth.Authentication
+import io.ktor.server.auth.UserIdPrincipal
+import io.ktor.server.auth.authenticate
+import io.ktor.server.auth.basic
 import io.ktor.server.plugins.autohead.AutoHeadResponse
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
@@ -36,11 +40,57 @@ import org.craftedsw.swift.simulator.TrafficSimulator
 import org.craftedsw.swift.ui.RegisterHtml
 import org.craftedsw.swift.ui.ScoreboardHtml
 
+data class FacilitatorCredentials(
+    val username: String = "admin",
+    val password: String = "admin"
+) {
+    companion object {
+        fun fromEnv(env: (String) -> String? = { System.getenv(it) }): FacilitatorCredentials {
+            val singleAuth = env("FACILITATOR_AUTH")
+                ?: env("FACILITATOR_CREDENTIALS")
+                ?: env("SCOREBOARD_AUTH")
+                ?: env("SWIFT_HUB_AUTH")
+
+            if (!singleAuth.isNullOrBlank()) {
+                val parts = singleAuth.split(":", limit = 2)
+                return if (parts.size == 2) {
+                    FacilitatorCredentials(parts[0], parts[1])
+                } else {
+                    FacilitatorCredentials(parts[0], parts[0])
+                }
+            }
+
+            val user = env("FACILITATOR_USERNAME")
+                ?: env("FACILITATOR_USER")
+                ?: env("SCOREBOARD_USERNAME")
+                ?: env("SCOREBOARD_USER")
+                ?: env("SWIFT_HUB_USER")
+                ?: env("ADMIN_USER")
+
+            val pass = env("FACILITATOR_PASSWORD")
+                ?: env("FACILITATOR_PASS")
+                ?: env("FACILITATOR_SECRET")
+                ?: env("SCOREBOARD_PASSWORD")
+                ?: env("SCOREBOARD_PASS")
+                ?: env("SWIFT_HUB_PASSWORD")
+                ?: env("ADMIN_PASSWORD")
+
+            return when {
+                user != null && pass != null -> FacilitatorCredentials(user, pass)
+                user != null -> FacilitatorCredentials(user, user)
+                pass != null -> FacilitatorCredentials(pass, pass)
+                else -> FacilitatorCredentials("admin", "admin")
+            }
+        }
+    }
+}
+
 fun Application.swiftHubModule(
     bankRegistry: BankRegistry = BankRegistry(),
     auditLedger: AuditLedger = AuditLedger(),
     transferRouter: TransferRouter = TransferRouter(bankRegistry, auditLedger),
-    trafficSimulator: TrafficSimulator = TrafficSimulator(bankRegistry, transferRouter)
+    trafficSimulator: TrafficSimulator = TrafficSimulator(bankRegistry, transferRouter),
+    credentials: FacilitatorCredentials = FacilitatorCredentials.fromEnv()
 ) {
     install(AutoHeadResponse)
 
@@ -57,15 +107,23 @@ fun Application.swiftHubModule(
         }
     }
 
+    install(Authentication) {
+        basic(name = "facilitator-auth") {
+            realm = "SWIFT Hub Facilitator Scoreboard"
+            validate { userPasswordCredential ->
+                if (userPasswordCredential.name == credentials.username &&
+                    userPasswordCredential.password == credentials.password
+                ) {
+                    UserIdPrincipal(userPasswordCredential.name)
+                } else {
+                    null
+                }
+            }
+        }
+    }
+
     routing {
-        get("/") {
-            call.respondText(ScoreboardHtml.render(), ContentType.Text.Html)
-        }
-
-        get("/scoreboard") {
-            call.respondText(ScoreboardHtml.render(), ContentType.Text.Html)
-        }
-
+        // Public routes - accessible without authentication
         get("/register") {
             call.respondText(RegisterHtml.render(), ContentType.Text.Html)
         }
@@ -108,16 +166,6 @@ fun Application.swiftHubModule(
             call.respond(HttpStatusCode.OK, bankRegistry.getAllBanks())
         }
 
-        delete("/swift/banks/{bic}") {
-            val bic = call.parameters["bic"].orEmpty()
-            val removed = bankRegistry.remove(Bic(bic))
-            if (removed == null) {
-                call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
-            } else {
-                call.respond(HttpStatusCode.OK, removed)
-            }
-        }
-
         post("/swift/transfers") {
             val transfer = call.receive<TransferRequest>()
             val result = transferRouter.routeTransfer(transfer)
@@ -130,83 +178,150 @@ fun Application.swiftHubModule(
             call.respond(statusCode, result)
         }
 
-        get("/swift/ledger") {
-            call.respond(
-                HttpStatusCode.OK,
-                LedgerResponse(
-                    totalSettledVolumeCents = auditLedger.getTotalSettledVolumeCents(),
-                    totalSuccessfulTransactions = auditLedger.getTotalSuccessfulCount(),
-                    totalFailedTransactions = auditLedger.getTotalFailedCount(),
-                    isConservationOfMoneyVerified = auditLedger.verifyConservationOfMoney(),
-                    recentEntries = auditLedger.getRecentEntries(30)
+        // Protected facilitator routes - requires basic authentication
+        authenticate("facilitator-auth") {
+            get("/") {
+                call.respondText(ScoreboardHtml.render(), ContentType.Text.Html)
+            }
+
+            get("/scoreboard") {
+                call.respondText(ScoreboardHtml.render(), ContentType.Text.Html)
+            }
+
+            delete("/swift/banks/{bic}") {
+                val bic = call.parameters["bic"].orEmpty()
+                val removed = bankRegistry.remove(Bic(bic))
+                if (removed == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
+                } else {
+                    call.respond(HttpStatusCode.OK, removed)
+                }
+            }
+
+            get("/swift/ledger") {
+                call.respond(
+                    HttpStatusCode.OK,
+                    LedgerResponse(
+                        totalSettledVolumeCents = auditLedger.getTotalSettledVolumeCents(),
+                        totalSuccessfulTransactions = auditLedger.getTotalSuccessfulCount(),
+                        totalFailedTransactions = auditLedger.getTotalFailedCount(),
+                        isConservationOfMoneyVerified = auditLedger.verifyConservationOfMoney(),
+                        recentEntries = auditLedger.getRecentEntries(30)
+                    )
                 )
-            )
-        }
+            }
 
-        get("/swift/metrics") {
-            val allBanks = bankRegistry.getAllBanks()
-            val totalTx = auditLedger.getTotalTransactionsCount()
-            val failedTx = auditLedger.getTotalFailedCount()
-            val errorRate = if (totalTx > 0) (failedTx.toDouble() / totalTx.toDouble()) * 100.0 else 0.0
+            get("/swift/metrics") {
+                val allBanks = bankRegistry.getAllBanks()
+                val totalTx = auditLedger.getTotalTransactionsCount()
+                val failedTx = auditLedger.getTotalFailedCount()
+                val errorRate = if (totalTx > 0) (failedTx.toDouble() / totalTx.toDouble()) * 100.0 else 0.0
 
-            val state = ScoreboardState(
-                banks = allBanks.sortedByDescending { it.score },
-                metrics = NetworkMetrics(
-                    activeBanksCount = allBanks.size,
-                    totalVolumeCents = auditLedger.getTotalSettledVolumeCents(),
-                    totalTransactions = totalTx,
-                    throughputTps = 0.0,
-                    errorRatePercentage = errorRate
+                val state = ScoreboardState(
+                    banks = allBanks.sortedByDescending { it.score },
+                    metrics = NetworkMetrics(
+                        activeBanksCount = allBanks.size,
+                        totalVolumeCents = auditLedger.getTotalSettledVolumeCents(),
+                        totalTransactions = totalTx,
+                        throughputTps = 0.0,
+                        errorRatePercentage = errorRate
+                    )
                 )
-            )
-            call.respond(HttpStatusCode.OK, state)
-        }
+                call.respond(HttpStatusCode.OK, state)
+            }
 
-        get("/swift/simulator/status") {
-            val status = if (trafficSimulator.isSimulatorRunning()) "RUNNING" else "STOPPED"
-            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = status, intervalMs = trafficSimulator.getIntervalMs()))
-        }
+            get("/swift/simulator/status") {
+                val status = if (trafficSimulator.isSimulatorRunning()) "RUNNING" else "STOPPED"
+                call.respond(
+                    HttpStatusCode.OK,
+                    SimulatorStatusResponse(
+                        status = status,
+                        intervalMs = trafficSimulator.getIntervalMs(),
+                        phases = trafficSimulator.getPhasesStatus()
+                    )
+                )
+            }
 
-        post("/swift/simulator/start") {
-            val intervalMs = call.request.queryParameters["intervalMs"]?.toLongOrNull() ?: 2000L
-            trafficSimulator.start(intervalMs)
-            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "RUNNING", intervalMs = intervalMs))
-        }
+            get("/swift/simulator/phases") {
+                call.respond(HttpStatusCode.OK, trafficSimulator.getPhasesStatus())
+            }
 
-        post("/swift/simulator/stop") {
-            trafficSimulator.stop()
-            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "STOPPED"))
-        }
+            post("/swift/simulator/phase/{phase}/toggle") {
+                val phase = call.parameters["phase"].orEmpty()
+                val isNowRunning = trafficSimulator.togglePhase(phase)
+                call.respond(
+                    HttpStatusCode.OK,
+                    SimulatorStatusResponse(
+                        status = if (isNowRunning) "RUNNING" else "STOPPED",
+                        phases = trafficSimulator.getPhasesStatus()
+                    )
+                )
+            }
 
-        post("/swift/simulator/burst") {
-            val count = call.request.queryParameters["count"]?.toIntOrNull() ?: 5
-            val executed = trafficSimulator.triggerBurst(count)
-            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "BURST_EXECUTED", count = executed))
-        }
+            post("/swift/simulator/phase/{phase}/start") {
+                val phase = call.parameters["phase"].orEmpty()
+                trafficSimulator.startPhase(phase)
+                call.respond(
+                    HttpStatusCode.OK,
+                    SimulatorStatusResponse(status = "RUNNING", phases = trafficSimulator.getPhasesStatus())
+                )
+            }
 
-        post("/swift/simulator/scenario/deposit-positive") {
-            val results = trafficSimulator.runPositiveDepositScenario()
-            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
-        }
+            post("/swift/simulator/phase/{phase}/stop") {
+                val phase = call.parameters["phase"].orEmpty()
+                trafficSimulator.stopPhase(phase)
+                call.respond(
+                    HttpStatusCode.OK,
+                    SimulatorStatusResponse(status = "STOPPED", phases = trafficSimulator.getPhasesStatus())
+                )
+            }
 
-        post("/swift/simulator/scenario/deposit-negative") {
-            val results = trafficSimulator.runNegativeDepositScenario()
-            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
-        }
+            post("/swift/simulator/start") {
+                val intervalMs = call.request.queryParameters["intervalMs"]?.toLongOrNull() ?: 2000L
+                trafficSimulator.start(intervalMs)
+                call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "RUNNING", intervalMs = intervalMs, phases = trafficSimulator.getPhasesStatus()))
+            }
 
-        post("/swift/simulator/scenario/deposit") {
-            val results = trafficSimulator.runAllDepositScenarios()
-            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
-        }
+            post("/swift/simulator/stop") {
+                trafficSimulator.stop()
+                call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "STOPPED", phases = trafficSimulator.getPhasesStatus()))
+            }
 
-        post("/swift/simulator/scenario/withdraw") {
-            val results = trafficSimulator.runDepositWithdrawScenario()
-            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
-        }
+            post("/swift/simulator/burst") {
+                val count = call.request.queryParameters["count"]?.toIntOrNull() ?: 5
+                val executed = trafficSimulator.triggerBurst(count)
+                call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "BURST_EXECUTED", count = executed, phases = trafficSimulator.getPhasesStatus()))
+            }
 
-        post("/swift/simulator/scenario/all") {
-            val results = trafficSimulator.runAllScenarios()
-            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
+            post("/swift/simulator/scenario/deposit-positive") {
+                val results = trafficSimulator.runPositiveDepositScenario()
+                call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results, phases = trafficSimulator.getPhasesStatus()))
+            }
+
+            post("/swift/simulator/scenario/deposit-negative") {
+                val results = trafficSimulator.runNegativeDepositScenario()
+                call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results, phases = trafficSimulator.getPhasesStatus()))
+            }
+
+            post("/swift/simulator/scenario/deposit") {
+                val results = trafficSimulator.runDepositsPhase()
+                call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results, phases = trafficSimulator.getPhasesStatus()))
+            }
+
+            post("/swift/simulator/scenario/withdraw") {
+                val results = trafficSimulator.runWithdrawalsPhase()
+                call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results, phases = trafficSimulator.getPhasesStatus()))
+            }
+
+            post("/swift/simulator/scenario/transfer") {
+                val results = trafficSimulator.runTransfersPhase()
+                call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results, phases = trafficSimulator.getPhasesStatus()))
+            }
+
+            post("/swift/simulator/scenario/all") {
+                val results = trafficSimulator.runAllScenarios()
+                call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results, phases = trafficSimulator.getPhasesStatus()))
+            }
         }
     }
 }

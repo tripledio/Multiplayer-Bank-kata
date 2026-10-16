@@ -232,7 +232,7 @@ class TrafficSimulatorTest {
         assertThat(results).hasSize(1)
         val r = results.first()
         assertThat(r.passed).isTrue()
-        assertThat(r.scenario).isEqualTo("DEPOSIT_50_WITHDRAW_20_EUR")
+        assertThat(r.scenario).isEqualTo("WITHDRAW_HAPPY_20_EUR")
         assertThat(r.expected).contains("Balance 30.00 EUR | Statement (2 lines)")
         assertThat(r.actual).contains("Balance 30.00 EUR | Statement (2 lines)")
     }
@@ -287,6 +287,95 @@ class TrafficSimulatorTest {
         assertThat(r.passed).isFalse()
         assertThat(r.expected).contains("Balance 30.00 EUR | Statement (2 lines)")
         assertThat(r.actual).contains("Balance 30.00 EUR | Statement (1 line)")
+    }
+
+    @Test
+    fun `should execute intra-bank transfer scenario successfully`() = runTest {
+        bankRegistry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "http://alpha:8080"))
+
+        val mockEngine = MockEngine { request ->
+            val url = request.url.encodedPath
+            if (url.endsWith("/api/deposit")) {
+                respond(
+                    content = Json.encodeToString(BalanceResponse(iban = "BE68BANKA0001234567", balanceCents = 5000L)),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else if (url.endsWith("/api/withdraw")) {
+                respond(
+                    content = Json.encodeToString(BalanceResponse(iban = "BE68BANKA0001234567", balanceCents = 3000L)),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else if (url.endsWith("/api/transfer-in")) {
+                respond(
+                    content = Json.encodeToString(TransferResult("tx-1", TransferStatus.ACCEPTED, "OK")),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else if (url.contains("/api/statement")) {
+                val isFrom = request.url.toString().contains("0001") || request.url.toString().contains("0002") || request.url.toString().contains("0003") || request.url.toString().contains("0004")
+                if (isFrom) {
+                    respond(
+                        content = Json.encodeToString(
+                            StatementResponse(
+                                iban = "BE68BANKA0001234567",
+                                lines = listOf(
+                                    StatementLineDto(date = "16/10/2026", debit = "20.00", balance = "30.00"),
+                                    StatementLineDto(date = "16/10/2026", credit = "50.00", balance = "50.00")
+                                ),
+                                currentBalanceCents = 3000L
+                            )
+                        ),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                } else {
+                    respond(
+                        content = Json.encodeToString(
+                            StatementResponse(
+                                iban = "BE68BANKA0005678901",
+                                lines = listOf(
+                                    StatementLineDto(date = "16/10/2026", credit = "20.00", balance = "20.00")
+                                ),
+                                currentBalanceCents = 2000L
+                            )
+                        ),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                }
+            } else {
+                respond(content = "Not Found", status = HttpStatusCode.NotFound)
+            }
+        }
+
+        val mockHttpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) { json() }
+        }
+
+        val sim = TrafficSimulator(bankRegistry, transferRouter, mockHttpClient)
+        val results = sim.runIntraBankTransferScenario()
+
+        assertThat(results).hasSize(1)
+        val r = results.first()
+        assertThat(r.passed).isTrue()
+        assertThat(r.scenario).isEqualTo("INTRA_BANK_TRANSFER")
+    }
+
+    @Test
+    fun `should support phase start stop toggle and report status`() {
+        val sim = TrafficSimulator(bankRegistry, transferRouter)
+        val initialStatus = sim.getPhasesStatus()
+        assertThat(initialStatus.deposits.running).isFalse()
+        assertThat(initialStatus.withdrawals.running).isFalse()
+        assertThat(initialStatus.transfers.running).isFalse()
+
+        sim.togglePhase("DEPOSITS")
+        assertThat(sim.getPhasesStatus().deposits.running).isTrue()
+
+        sim.togglePhase("DEPOSITS")
+        assertThat(sim.getPhasesStatus().deposits.running).isFalse()
     }
 
     @Test
