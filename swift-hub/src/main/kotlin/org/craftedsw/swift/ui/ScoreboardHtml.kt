@@ -90,10 +90,11 @@ object ScoreboardHtml {
                                         <th>Processed</th>
                                         <th>Success Rate</th>
                                         <th>Status</th>
+                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody id="leaderboardBody">
-                                    <tr><td colspan="8" class="text-center py-4 text-secondary">No banks registered yet. Run <code>./gradlew :bank-starter:run</code> to connect.</td></tr>
+                                    <tr><td colspan="9" class="text-center py-4 text-secondary">No banks registered yet. Run <code>./gradlew :bank-starter:run</code> to connect.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -442,6 +443,8 @@ object ScoreboardHtml {
             }
         }
 
+        let lastBanks = [];
+
         async function pollState() {
             try {
                 const res = await fetch('/swift/metrics');
@@ -467,12 +470,13 @@ object ScoreboardHtml {
             document.getElementById('kpiErrorRate').innerText = (m.errorRatePercentage || 0).toFixed(1) + '%';
             document.getElementById('bankCountBadge').innerText = (data.banks || []).length + ' registered';
 
+            lastBanks = data.banks || [];
             updateMoneyChart(data.banks);
             updateMoneyLineChart(data.banks);
 
             const tbody = document.getElementById('leaderboardBody');
             if (!data.banks || data.banks.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-secondary">No banks registered yet. Run <code>./gradlew :bank-starter:run</code> to connect.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-secondary">No banks registered yet. Run <code>./gradlew :bank-starter:run</code> to connect.</td></tr>';
                 return;
             }
 
@@ -493,10 +497,32 @@ object ScoreboardHtml {
                         <td>${'$'}{b.totalTransactions}</td>
                         <td><span class="text-success">${'$'}{rate}</span></td>
                         <td><span class="badge ${'$'}{badgeClass}">${'$'}{b.status}</span></td>
+                        <td class="text-end pe-3"><button class="btn btn-sm btn-outline-danger" title="Remove bank" onclick="removeBank('${'$'}{b.bic}', this)">🗑 Remove</button></td>
                     </tr>
                 `;
             });
             tbody.innerHTML = html;
+        }
+
+        async function removeBank(bic, btn) {
+            const bank = (lastBanks || []).find(b => b.bic === bic);
+            const label = bank ? bank.name + ' (' + bic + ')' : bic;
+            if (!confirm('Remove ' + label + ' from the SWIFT network?')) return;
+            btn.disabled = true;
+            try {
+                const res = await fetch('/swift/banks/' + encodeURIComponent(bic), { method: 'DELETE' });
+                if (!res.ok && res.status !== 404) {
+                    btn.disabled = false;
+                    console.warn('Failed to remove bank', bic, res.status);
+                    return;
+                }
+                delete bankHistory[bic];
+            } catch (err) {
+                btn.disabled = false;
+                console.warn('Failed to remove bank', bic, err);
+                return;
+            }
+            pollState();
         }
 
         function renderLedger(entries) {

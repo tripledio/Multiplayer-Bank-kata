@@ -87,4 +87,16 @@ class BankRegistryTest {
         assertThat(registry.getBank(Bic(node2.bic))).isNotNull
         assertThat(registry.getBank(Bic(node3.bic))).isNotNull
     }
+
+    @Test
+    fun `should remove bank by exact BIC`() {
+        registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Alpha", webhookUrl = "http://localhost:8080"))
+        registry.register(RegisterBankRequest(bic = "BANKBXXX", name = "Beta", webhookUrl = "http://localhost:8081"))
+
+        assertThat(registry.remove(Bic("BANKA"))).isNull()
+        val removed = registry.remove(Bic("bankaxxx"))
+
+        assertThat(removed?.name).isEqualTo("Alpha")
+        assertThat(registry.getAllBanks().map { it.bic }).containsExactly("BANKBXXX")
+    }
 }

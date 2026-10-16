@@ -66,6 +66,9 @@ class BankRegistry {
         return registry.values.toList()
     }
 
+    /** Removes by exact BIC only; the flexible lookup of [getBank] could remove the wrong bank. */
+    fun remove(bic: Bic): BankNodeInfo? = registry.remove(bic.value.uppercase().trim())
+
     fun updateStatus(bic: Bic, status: String) {
         val targetBank = getBank(bic) ?: return
         registry.computeIfPresent(targetBank.bic) { _, current ->

@@ -11,11 +11,13 @@ import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import org.craftedsw.contracts.Bic
 import org.craftedsw.contracts.ErrorResponse
 import org.craftedsw.contracts.HealthResponse
 import org.craftedsw.contracts.LedgerResponse
@@ -104,6 +106,16 @@ fun Application.swiftHubModule(
 
         get("/swift/banks") {
             call.respond(HttpStatusCode.OK, bankRegistry.getAllBanks())
+        }
+
+        delete("/swift/banks/{bic}") {
+            val bic = call.parameters["bic"].orEmpty()
+            val removed = bankRegistry.remove(Bic(bic))
+            if (removed == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
+            } else {
+                call.respond(HttpStatusCode.OK, removed)
+            }
         }
 
         post("/swift/transfers") {

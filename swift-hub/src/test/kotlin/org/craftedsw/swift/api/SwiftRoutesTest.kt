@@ -2,6 +2,7 @@ package org.craftedsw.swift.api
 
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -312,5 +313,25 @@ class SwiftRoutesTest {
         val allBody = allRes.body<SimulatorStatusResponse>()
         assertThat(allBody.status).isEqualTo("SCENARIO_EXECUTED")
         assertThat(allBody.results).isNotNull
+    }
+
+    @Test
+    fun `delete bank should remove it from registry and return 404 when unknown`() = testApplication {
+        val registry = BankRegistry()
+        registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "https://alpha.loca.lt"))
+        application {
+            swiftHubModule(bankRegistry = registry)
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+        }
+
+        val response = client.delete("/swift/banks/BANKAXXX")
+        assertThat(response.status).isEqualTo(HttpStatusCode.OK)
+        assertThat(response.body<BankNodeInfo>().name).isEqualTo("Bank Alpha")
+        assertThat(client.get("/swift/banks").body<List<BankNodeInfo>>()).isEmpty()
+
+        assertThat(client.delete("/swift/banks/BANKAXXX").status).isEqualTo(HttpStatusCode.NotFound)
     }
 }
