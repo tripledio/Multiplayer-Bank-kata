@@ -164,6 +164,47 @@ class SwiftRoutesTest {
         val scoreboard = response.body<ScoreboardState>()
         assertThat(scoreboard.banks).hasSize(1)
         assertThat(scoreboard.metrics.activeBanksCount).isEqualTo(1)
+        assertThat(scoreboard.graph.nodes).hasSize(1)
+        assertThat(scoreboard.graph.nodes.first().bic).isEqualTo("BANKAXXX")
+    }
+
+    @Test
+    fun `graph endpoint should return bank nodes and transfer edges when authenticated`() = testApplication {
+        val registry = BankRegistry()
+        registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "http://localhost:8080"))
+        registry.register(RegisterBankRequest(bic = "BANKBXXX", name = "Bank Beta", webhookUrl = "http://localhost:8081"))
+
+        val ledger = AuditLedger()
+        ledger.record(
+            TransferRequest(
+                transactionId = "tx-1",
+                fromIban = "BE68BANKA0001111111",
+                toIban = "BE68BANKB0002222222",
+                amountCents = 7500
+            ),
+            TransferResult("tx-1", TransferStatus.ACCEPTED, "Settled")
+        )
+
+        application {
+            swiftHubModule(bankRegistry = registry, auditLedger = ledger)
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+        }
+
+        val response = client.get("/swift/graph") {
+            basicAuth("admin", "admin")
+        }
+        assertThat(response.status).isEqualTo(HttpStatusCode.OK)
+        val graph = response.body<org.craftedsw.contracts.BankGraph>()
+        assertThat(graph.nodes).hasSize(2)
+        assertThat(graph.edges).hasSize(1)
+        val edge = graph.edges.first()
+        assertThat(edge.sourceBic).isEqualTo("BANKAXXX")
+        assertThat(edge.targetBic).isEqualTo("BANKBXXX")
+        assertThat(edge.totalAmountCents).isEqualTo(7500L)
+        assertThat(edge.successfulCount).isEqualTo(1L)
     }
 
     @Test

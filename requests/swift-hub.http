@@ -181,3 +181,10 @@ Authorization: {{facilitatorAuth}}
 # Run all one-off test scenarios for all registered banks (comparing expected ledger vs actual bank statement).
 POST {{hubUrl}}/swift/simulator/scenario/all
 Authorization: {{facilitatorAuth}}
+
+### -------------------------------------------------------------------------
+### 18. Inter-Bank Network Transfer Graph (Nodes & Edges)
+### -------------------------------------------------------------------------
+# Fetch the transfer graph showing bank nodes and edges with transferred amounts.
+GET {{hubUrl}}/swift/graph
+Authorization: {{facilitatorAuth}}

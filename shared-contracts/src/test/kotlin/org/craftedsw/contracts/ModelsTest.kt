@@ -64,4 +64,30 @@ class ModelsTest {
 
         assertThat(deserialized).isEqualTo(state)
     }
+
+    @Test
+    fun `should serialize and deserialize BankGraph correctly`() {
+        val graph = BankGraph(
+            nodes = listOf(
+                BankGraphNode("BANKAXXX", "Bank Alpha", "HEALTHY", totalMoneyCents = 15000, score = 10),
+                BankGraphNode("BANKBXXX", "Bank Beta", "HEALTHY", totalMoneyCents = 25000, score = 20)
+            ),
+            edges = listOf(
+                BankGraphEdge(
+                    sourceBic = "BANKAXXX",
+                    targetBic = "BANKBXXX",
+                    sourceName = "Bank Alpha",
+                    targetName = "Bank Beta",
+                    totalAmountCents = 5000,
+                    transactionCount = 2,
+                    successfulCount = 2
+                )
+            )
+        )
+
+        val jsonString = json.encodeToString(graph)
+        val deserialized = json.decodeFromString<BankGraph>(jsonString)
+
+        assertThat(deserialized).isEqualTo(graph)
+    }
 }

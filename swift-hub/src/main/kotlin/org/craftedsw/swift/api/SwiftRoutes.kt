@@ -225,9 +225,15 @@ fun Application.swiftHubModule(
                         totalTransactions = totalTx,
                         throughputTps = 0.0,
                         errorRatePercentage = errorRate
-                    )
+                    ),
+                    graph = auditLedger.getGraph(bankRegistry)
                 )
                 call.respond(HttpStatusCode.OK, state)
+            }
+
+            get("/swift/graph") {
+                val graph = auditLedger.getGraph(bankRegistry)
+                call.respond(HttpStatusCode.OK, graph)
             }
 
             get("/swift/simulator/status") {

@@ -135,10 +135,37 @@ data class NetworkMetrics(
 )
 
 @Serializable
+data class BankGraphNode(
+    val bic: String,
+    val name: String,
+    val status: String,
+    val totalMoneyCents: Long = 0,
+    val score: Long = 0
+)
+
+@Serializable
+data class BankGraphEdge(
+    val sourceBic: String,
+    val targetBic: String,
+    val sourceName: String = "",
+    val targetName: String = "",
+    val totalAmountCents: Long = 0,
+    val transactionCount: Long = 0,
+    val successfulCount: Long = 0
+)
+
+@Serializable
+data class BankGraph(
+    val nodes: List<BankGraphNode> = emptyList(),
+    val edges: List<BankGraphEdge> = emptyList()
+)
+
+@Serializable
 data class ScoreboardState(
     val banks: List<BankNodeInfo>,
     val metrics: NetworkMetrics,
-    val recentTransfers: List<TransferRequest> = emptyList()
+    val recentTransfers: List<TransferRequest> = emptyList(),
+    val graph: BankGraph = BankGraph()
 )
 
 @Serializable

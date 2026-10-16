@@ -25,6 +25,14 @@ object ScoreboardHtml {
         .pulse { animation: pulse-animation 2s infinite; }
         @keyframes pulse-animation { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
         .btn-control { font-weight: 600; }
+        .graph-container { position: relative; width: 100%; height: 380px; background: #0d1117; border-radius: 6px; overflow: hidden; border: 1px solid #21262d; }
+        .graph-svg { width: 100%; height: 100%; display: block; }
+        .graph-node { cursor: grab; transition: transform 0.1s ease; }
+        .graph-node:active { cursor: grabbing; }
+        .graph-edge { fill: none; stroke-linecap: round; transition: stroke-width 0.2s, stroke 0.2s; }
+        .edge-label-bg { fill: #161b22; stroke: #30363d; stroke-width: 1px; rx: 4px; }
+        .edge-label-text { fill: #58a6ff; font-family: monospace; font-size: 11px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; }
+        .edge-label-subtext { fill: #8b949e; font-family: monospace; font-size: 9px; text-anchor: middle; dominant-baseline: middle; }
     </style>
 </head>
 <body class="p-4">
@@ -208,6 +216,46 @@ object ScoreboardHtml {
                     </div>
                 </div>
 
+                <!-- Inter-Bank Transfer Network Graph (Nodes & Edges) -->
+                <div class="card mb-4 border-primary">
+                    <div class="card-header bg-dark bg-gradient d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fs-5 fw-bold text-white">🌐 Inter-Bank Transfer Network Graph</span>
+                            <span class="badge bg-secondary" id="graphNodesBadge">0 nodes</span>
+                            <span class="badge bg-info text-dark" id="graphEdgesBadge">0 edges</span>
+                        </div>
+                        <div class="d-flex gap-2 align-items-center">
+                            <span class="small text-secondary me-2" id="graphVolumeSummary">Settled: € 0.00</span>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="resetGraphLayout()" title="Rearrange nodes in a circular layout">🔄 Reset Layout</button>
+                        </div>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="graph-container" id="graphContainer">
+                            <svg id="networkGraphSvg" class="graph-svg" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet">
+                                <defs>
+                                    <marker id="arrow-head" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#58a6ff" />
+                                    </marker>
+                                    <marker id="arrow-head-hover" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                                        <path d="M 0 1 L 9 5 L 0 9 z" fill="#39c5bb" />
+                                    </marker>
+                                    <filter id="node-glow" x="-20%" y="-20%" width="140%" height="140%">
+                                        <feGaussianBlur stdDeviation="3" result="blur" />
+                                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                                    </filter>
+                                </defs>
+                                <g id="graphEdgesLayer"></g>
+                                <g id="graphNodesLayer"></g>
+                            </svg>
+                            <div id="graphEmptyNotice" class="position-absolute top-50 start-50 translate-middle text-center text-secondary small d-none">
+                                <div class="fs-4 mb-2">🕸️</div>
+                                <div>Awaiting registered banks &amp; inter-bank transactions...</div>
+                            </div>
+                            <div id="graphTooltip" class="position-absolute p-2 bg-black bg-opacity-75 border border-secondary rounded shadow small text-light d-none" style="pointer-events: none; z-index: 100; font-size: 0.75rem;"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Total Money History (Line Chart) -->
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
@@ -306,6 +354,278 @@ object ScoreboardHtml {
         ];
 
         let moneyChart = null;
+        let lastGraphData = null;
+        let graphPositions = {};
+        let activeDraggedNode = null;
+        let dragOffset = { x: 0, y: 0 };
+
+        function resetGraphLayout() {
+            graphPositions = {};
+            if (lastGraphData) {
+                renderTransferGraph(lastGraphData.graph, lastGraphData.banks);
+            }
+        }
+
+        function calculateDefaultNodePositions(nodes, width, height) {
+            const count = nodes.length;
+            if (count === 0) return {};
+            const positions = {};
+            const cx = width / 2;
+            const cy = height / 2;
+            const radiusX = Math.min(width * 0.38, 300);
+            const radiusY = Math.min(height * 0.36, 150);
+
+            if (count === 1) {
+                positions[nodes[0].bic] = { x: cx, y: cy };
+                return positions;
+            }
+
+            nodes.forEach((node, i) => {
+                const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
+                positions[node.bic] = {
+                    x: cx + radiusX * Math.cos(angle),
+                    y: cy + radiusY * Math.sin(angle)
+                };
+            });
+            return positions;
+        }
+
+        function renderTransferGraph(graph, banks) {
+            const svg = document.getElementById('networkGraphSvg');
+            const edgesLayer = document.getElementById('graphEdgesLayer');
+            const nodesLayer = document.getElementById('graphNodesLayer');
+            const emptyNotice = document.getElementById('graphEmptyNotice');
+            const nodesBadge = document.getElementById('graphNodesBadge');
+            const edgesBadge = document.getElementById('graphEdgesBadge');
+            const volumeSummary = document.getElementById('graphVolumeSummary');
+
+            if (!svg || !edgesLayer || !nodesLayer) return;
+
+            const currentNodes = (graph && graph.nodes && graph.nodes.length > 0) ? graph.nodes : (banks || []);
+            const currentEdges = (graph && graph.edges) ? graph.edges : [];
+
+            if (nodesBadge) nodesBadge.innerText = currentNodes.length + ' node' + (currentNodes.length === 1 ? '' : 's');
+            if (edgesBadge) edgesBadge.innerText = currentEdges.length + ' edge' + (currentEdges.length === 1 ? '' : 's');
+
+            const totalEdgeCents = currentEdges.reduce((sum, e) => sum + (e.totalAmountCents || 0), 0);
+            if (volumeSummary) volumeSummary.innerText = 'Transferred: ' + formatCents(totalEdgeCents);
+
+            if (currentNodes.length === 0) {
+                edgesLayer.innerHTML = '';
+                nodesLayer.innerHTML = '';
+                if (emptyNotice) emptyNotice.classList.remove('d-none');
+                return;
+            }
+
+            if (emptyNotice) emptyNotice.classList.add('d-none');
+
+            const width = 800;
+            const height = 420;
+
+            const defaultPos = calculateDefaultNodePositions(currentNodes, width, height);
+            currentNodes.forEach(node => {
+                if (!graphPositions[node.bic]) {
+                    graphPositions[node.bic] = defaultPos[node.bic] || { x: width / 2, y: height / 2 };
+                }
+            });
+
+            // Clean up removed nodes
+            Object.keys(graphPositions).forEach(bic => {
+                if (!currentNodes.some(n => n.bic === bic)) {
+                    delete graphPositions[bic];
+                }
+            });
+
+            // 1. Render Edges
+            let edgesHtml = '';
+            currentEdges.forEach((edge, idx) => {
+                const srcPos = graphPositions[edge.sourceBic] || defaultPos[edge.sourceBic] || { x: 200, y: 200 };
+                const dstPos = graphPositions[edge.targetBic] || defaultPos[edge.targetBic] || { x: 600, y: 200 };
+
+                const isSelf = edge.sourceBic === edge.targetBic;
+                let pathD = '';
+                let labelX = 0;
+                let labelY = 0;
+
+                if (isSelf) {
+                    const sx = srcPos.x;
+                    const sy = srcPos.y - 28;
+                    pathD = `M ${'$'}{sx - 15} ${'$'}{sy} C ${'$'}{sx - 45} ${'$'}{sy - 55}, ${'$'}{sx + 45} ${'$'}{sy - 55}, ${'$'}{sx + 15} ${'$'}{sy}`;
+                    labelX = sx;
+                    labelY = sy - 44;
+                } else {
+                    const dx = dstPos.x - srcPos.x;
+                    const dy = dstPos.y - srcPos.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                    const nx = -dy / dist;
+                    const ny = dx / dist;
+
+                    const offset = 28;
+                    const cx = (srcPos.x + dstPos.x) / 2 + nx * offset;
+                    const cy = (srcPos.y + dstPos.y) / 2 + ny * offset;
+
+                    pathD = `M ${'$'}{srcPos.x} ${'$'}{srcPos.y} Q ${'$'}{cx} ${'$'}{cy} ${'$'}{dstPos.x} ${'$'}{dstPos.y}`;
+                    labelX = (srcPos.x + 2 * cx + dstPos.x) / 4;
+                    labelY = (srcPos.y + 2 * cy + dstPos.y) / 4;
+                }
+
+                const strokeColor = palette[idx % palette.length];
+                const strokeWidth = Math.min(6, Math.max(2, Math.log10(Math.max(100, (edge.totalAmountCents || 0) / 100))));
+                const amountFormatted = formatCents(edge.totalAmountCents || 0);
+
+                edgesHtml += `
+                    <g class="graph-edge-group" data-edge-src="${'$'}{escapeHtml(edge.sourceBic)}" data-edge-dst="${'$'}{escapeHtml(edge.targetBic)}" data-edge-amount="${'$'}{escapeHtml(amountFormatted)}" data-edge-count="${'$'}{edge.transactionCount}" data-edge-success="${'$'}{edge.successfulCount}">
+                        <path d="${'$'}{pathD}" class="graph-edge" stroke="${'$'}{strokeColor}" stroke-width="${'$'}{strokeWidth}" marker-end="url(#arrow-head)" opacity="0.85" />
+                        <g transform="translate(${'$'}{labelX}, ${'$'}{labelY})">
+                            <rect x="-42" y="-14" width="84" height="25" class="edge-label-bg" />
+                            <text y="-2" class="edge-label-text">${'$'}{escapeHtml(amountFormatted)}</text>
+                            <text y="7" class="edge-label-subtext">${'$'}{edge.transactionCount} tx</text>
+                        </g>
+                    </g>
+                `;
+            });
+            edgesLayer.innerHTML = edgesHtml;
+
+            // 2. Render Nodes
+            let nodesHtml = '';
+            currentNodes.forEach((node, idx) => {
+                const pos = graphPositions[node.bic] || { x: width / 2, y: height / 2 };
+                const color = palette[idx % palette.length];
+                const statusColor = node.status === 'HEALTHY' ? '#238636' : (node.status === 'DEGRADED' ? '#d29922' : '#da3633');
+                const moneyFormatted = formatCents(node.totalMoneyCents || 0);
+
+                nodesHtml += `
+                    <g class="graph-node" data-node-bic="${'$'}{escapeHtml(node.bic)}" data-node-name="${'$'}{escapeHtml(node.name)}" data-node-status="${'$'}{escapeHtml(node.status)}" data-node-money="${'$'}{escapeHtml(moneyFormatted)}" data-node-score="${'$'}{node.score || 0}" transform="translate(${'$'}{pos.x}, ${'$'}{pos.y})">
+                        <circle r="30" fill="#161b22" stroke="${'$'}{statusColor}" stroke-width="3" filter="url(#node-glow)" />
+                        <circle r="26" fill="#1f242c" stroke="${'$'}{color}" stroke-width="1.5" />
+                        <text y="-38" fill="#c9d1d9" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">${'$'}{escapeHtml(node.name)}</text>
+                        <text y="4" fill="#ffffff" font-family="monospace" font-size="11" font-weight="700" text-anchor="middle">${'$'}{escapeHtml(node.bic)}</text>
+                        <g transform="translate(0, 42)">
+                            <rect x="-38" y="-10" width="76" height="18" fill="#161b22" stroke="#30363d" rx="4" />
+                            <text y="2" fill="#58a6ff" font-family="monospace" font-size="9.5" font-weight="600" text-anchor="middle">${'$'}{escapeHtml(moneyFormatted)}</text>
+                        </g>
+                    </g>
+                `;
+            });
+            nodesLayer.innerHTML = nodesHtml;
+
+            setupGraphInteractions();
+        }
+
+        function setupGraphInteractions() {
+            const svg = document.getElementById('networkGraphSvg');
+            const tooltip = document.getElementById('graphTooltip');
+            if (!svg) return;
+
+            const nodes = svg.querySelectorAll('.graph-node');
+            const edges = svg.querySelectorAll('.graph-edge-group');
+
+            nodes.forEach(nodeEl => {
+                const bic = nodeEl.getAttribute('data-node-bic');
+                const name = nodeEl.getAttribute('data-node-name');
+                const status = nodeEl.getAttribute('data-node-status');
+                const money = nodeEl.getAttribute('data-node-money');
+                const score = nodeEl.getAttribute('data-node-score');
+
+                nodeEl.onmousedown = (e) => startDrag(e, bic);
+                nodeEl.ontouchstart = (e) => startDrag(e, bic);
+
+                nodeEl.onmouseenter = (e) => {
+                    if (tooltip) {
+                        tooltip.innerHTML = `<strong>${'$'}{escapeHtml(name)}</strong> (<code>${'$'}{escapeHtml(bic)}</code>)<br>Status: <span class="badge ${'$'}{status === 'HEALTHY' ? 'bg-success' : 'bg-warning text-dark'}">${'$'}{escapeHtml(status)}</span><br>Balance: <span class="text-info font-monospace">${'$'}{escapeHtml(money)}</span><br>Score: <span class="text-primary font-monospace">${'$'}{escapeHtml(score)} pts</span>`;
+                        tooltip.classList.remove('d-none');
+                        updateTooltipPos(e);
+                    }
+                };
+
+                nodeEl.onmousemove = (e) => updateTooltipPos(e);
+
+                nodeEl.onmouseleave = () => {
+                    if (tooltip) tooltip.classList.add('d-none');
+                };
+            });
+
+            edges.forEach(edgeEl => {
+                const src = edgeEl.getAttribute('data-edge-src');
+                const dst = edgeEl.getAttribute('data-edge-dst');
+                const amount = edgeEl.getAttribute('data-edge-amount');
+                const count = edgeEl.getAttribute('data-edge-count');
+                const success = edgeEl.getAttribute('data-edge-success');
+
+                edgeEl.onmouseenter = (e) => {
+                    if (tooltip) {
+                        tooltip.innerHTML = `<strong>Transfer Route:</strong><br><code>${'$'}{escapeHtml(src)}</code> ➔ <code>${'$'}{escapeHtml(dst)}</code><br>Total Settled: <span class="text-success fw-bold font-monospace">${'$'}{escapeHtml(amount)}</span><br>Transactions: <span class="font-monospace">${'$'}{escapeHtml(success)} / ${'$'}{escapeHtml(count)} successful</span>`;
+                        tooltip.classList.remove('d-none');
+                        updateTooltipPos(e);
+                    }
+                };
+
+                edgeEl.onmousemove = (e) => updateTooltipPos(e);
+
+                edgeEl.onmouseleave = () => {
+                    if (tooltip) tooltip.classList.add('d-none');
+                };
+            });
+        }
+
+        function updateTooltipPos(e) {
+            const tooltip = document.getElementById('graphTooltip');
+            const container = document.getElementById('graphContainer');
+            if (!tooltip || !container) return;
+            const rect = container.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+            const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+            const x = clientX - rect.left + 15;
+            const y = clientY - rect.top + 15;
+            tooltip.style.left = Math.min(x, rect.width - 200) + 'px';
+            tooltip.style.top = Math.min(y, rect.height - 85) + 'px';
+        }
+
+        function startDrag(e, bic) {
+            e.preventDefault();
+            activeDraggedNode = bic;
+            const svg = document.getElementById('networkGraphSvg');
+            const pt = getSvgCoordinates(e, svg);
+            const currentPos = graphPositions[bic] || { x: 400, y: 200 };
+            dragOffset = { x: pt.x - currentPos.x, y: pt.y - currentPos.y };
+
+            const onMove = (moveEvt) => {
+                if (!activeDraggedNode) return;
+                const movePt = getSvgCoordinates(moveEvt, svg);
+                const newX = Math.max(35, Math.min(765, movePt.x - dragOffset.x));
+                const newY = Math.max(45, Math.min(375, movePt.y - dragOffset.y));
+                graphPositions[activeDraggedNode] = { x: newX, y: newY };
+                if (lastGraphData) {
+                    renderTransferGraph(lastGraphData.graph, lastGraphData.banks);
+                }
+            };
+
+            const onEnd = () => {
+                activeDraggedNode = null;
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onEnd);
+                window.removeEventListener('touchmove', onMove);
+                window.removeEventListener('touchend', onEnd);
+            };
+
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onMove);
+            window.addEventListener('touchend', onEnd);
+        }
+
+        function getSvgCoordinates(e, svg) {
+            const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+            const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+            const pt = svg.createSVGPoint();
+            pt.x = clientX;
+            pt.y = clientY;
+            const ctm = svg.getScreenCTM();
+            if (ctm) {
+                return pt.matrixTransform(ctm.inverse());
+            }
+            return { x: clientX, y: clientY };
+        }
 
         function updateMoneyChart(banks) {
             const canvas = document.getElementById('moneyPieChart');
@@ -552,8 +872,10 @@ object ScoreboardHtml {
             document.getElementById('bankCountBadge').innerText = (data.banks || []).length + ' registered';
 
             lastBanks = data.banks || [];
+            lastGraphData = data;
             updateMoneyChart(data.banks);
             updateMoneyLineChart(data.banks);
+            renderTransferGraph(data.graph, data.banks);
 
             const tbody = document.getElementById('leaderboardBody');
             if (!data.banks || data.banks.length === 0) {
@@ -598,6 +920,7 @@ object ScoreboardHtml {
                     return;
                 }
                 delete bankHistory[bic];
+                delete graphPositions[bic];
             } catch (err) {
                 btn.disabled = false;
                 console.warn('Failed to remove bank', bic, err);
