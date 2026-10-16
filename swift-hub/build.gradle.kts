@@ -7,6 +7,11 @@ application {
     mainClass.set("org.craftedsw.swift.SwiftHubApplicationKt")
 }
 
+// Lets the hub ask on startup whether to resume the previous session
+tasks.named<JavaExec>("run") {
+    standardInput = System.`in`
+}
+
 val ktorVersion = "3.1.1"
 
 dependencies {

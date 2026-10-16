@@ -56,6 +56,19 @@ class AuditLedger {
         return sumDebits == sumCredits
     }
 
+    fun restore(restored: List<LedgerEntry>) {
+        clear()
+        entries.addAll(restored)
+        restored.forEach { entry ->
+            if (entry.status == TransferStatus.ACCEPTED) {
+                totalSettledVolume.addAndGet(entry.amountCents)
+                totalSuccessfulTransactions.incrementAndGet()
+            } else {
+                totalFailedTransactions.incrementAndGet()
+            }
+        }
+    }
+
     fun clear() {
         entries.clear()
         totalSettledVolume.set(0)

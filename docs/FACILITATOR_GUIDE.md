@@ -25,6 +25,15 @@ This guide contains everything you need to host and facilitate a successful **90
 ```
 By default, the server binds to port `9000`.
 
+The hub saves its state (registered banks, scores, audit ledger, simulator on/off) to `swift-hub/swift-hub-state.json` every 2 seconds. When you restart it with a saved session present, it asks:
+
+```text
+Found a previous session: 4 bank(s), 312 transaction(s).
+Resume it? [Y/n] (n = start a new session):
+```
+
+Press Enter to resume, so connected banks keep working without registering again. Answer `n` to start fresh; the old state is kept as a `.bak` file next to it. Set `SWIFT_HUB_RESUME=true|false` to skip the question, and `SWIFT_HUB_STATE_FILE` to use another file.
+
 ### 2. Open the Projector Dashboard
 Open your browser to:
 ```text

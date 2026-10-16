@@ -88,6 +88,11 @@ class BankRegistry {
         }
     }
 
+    fun restore(banks: List<BankNodeInfo>) {
+        registry.clear()
+        banks.forEach { registry[it.bic] = it }
+    }
+
     fun clear() {
         registry.clear()
     }
