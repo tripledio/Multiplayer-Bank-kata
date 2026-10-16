@@ -137,6 +137,10 @@ class SwiftRoutesTest {
         assertThat(startBody.status).isEqualTo("RUNNING")
         assertThat(startBody.intervalMs).isEqualTo(1000L)
 
+        val runningStatus = client.get("/swift/simulator/status").body<SimulatorStatusResponse>()
+        assertThat(runningStatus.status).isEqualTo("RUNNING")
+        assertThat(runningStatus.intervalMs).isEqualTo(1000L)
+
         val burstRes = client.post("/swift/simulator/burst?count=3")
         assertThat(burstRes.status).isEqualTo(HttpStatusCode.OK)
         val burstBody = burstRes.body<SimulatorStatusResponse>()
@@ -146,6 +150,9 @@ class SwiftRoutesTest {
         assertThat(stopRes.status).isEqualTo(HttpStatusCode.OK)
         val stopBody = stopRes.body<SimulatorStatusResponse>()
         assertThat(stopBody.status).isEqualTo("STOPPED")
+
+        val stoppedStatus = client.get("/swift/simulator/status").body<SimulatorStatusResponse>()
+        assertThat(stoppedStatus.status).isEqualTo("STOPPED")
     }
 
     @Test

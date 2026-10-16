@@ -105,8 +105,7 @@ object ScoreboardHtml {
                     <div class="card-header">⚡ Facilitator Simulation Controls</div>
                     <div class="card-body">
                         <div class="d-flex flex-wrap gap-2 align-items-center">
-                            <button id="btnStartSim" class="btn btn-success btn-control" onclick="startSim()">▶ Start Traffic Sim</button>
-                            <button id="btnStopSim" class="btn btn-danger btn-control" onclick="stopSim()">⏹ Stop Sim</button>
+                            <button id="btnToggleSim" class="btn btn-success btn-control" onclick="toggleSim()">▶ Start Traffic Sim</button>
                             <button class="btn btn-primary btn-control" onclick="triggerBurst(5)">⚡ Fire 5 Tx Burst</button>
                             <button class="btn btn-warning btn-control" onclick="triggerBurst(20)">💥 Fire 20 Tx Surge</button>
                             <span id="simStatus" class="badge bg-secondary ms-auto">Simulator: Idle</span>
@@ -538,17 +537,42 @@ object ScoreboardHtml {
         }
         initQrCode();
 
-        async function startSim() {
-            await fetch('/swift/simulator/start', { method: 'POST' });
-            document.getElementById('simStatus').innerText = 'Simulator: Running (2s interval)';
-            document.getElementById('simStatus').className = 'badge bg-success ms-auto';
+        let simRunning = false;
+
+        function renderSimStatus(sim) {
+            simRunning = sim.status === 'RUNNING';
+            const btn = document.getElementById('btnToggleSim');
+            const badge = document.getElementById('simStatus');
+            if (simRunning) {
+                btn.innerText = '⏹ Stop Traffic Sim';
+                btn.className = 'btn btn-danger btn-control';
+                badge.innerText = 'Simulator: Running (' + (sim.intervalMs / 1000) + 's interval)';
+                badge.className = 'badge bg-success ms-auto';
+            } else {
+                btn.innerText = '▶ Start Traffic Sim';
+                btn.className = 'btn btn-success btn-control';
+                badge.innerText = 'Simulator: Stopped';
+                badge.className = 'badge bg-secondary ms-auto';
+            }
         }
 
-        async function stopSim() {
-            await fetch('/swift/simulator/stop', { method: 'POST' });
-            document.getElementById('simStatus').innerText = 'Simulator: Stopped';
-            document.getElementById('simStatus').className = 'badge bg-secondary ms-auto';
+        async function pollSimStatus() {
+            try {
+                const res = await fetch('/swift/simulator/status');
+                if (res.ok) renderSimStatus(await res.json());
+            } catch (err) {
+                console.error('Failed to fetch simulator status', err);
+            }
         }
+
+        async function toggleSim() {
+            const action = simRunning ? 'stop' : 'start';
+            await fetch('/swift/simulator/' + action, { method: 'POST' });
+            await pollSimStatus();
+        }
+
+        setInterval(pollSimStatus, 1500);
+        pollSimStatus();
 
         async function triggerBurst(count) {
             await fetch('/swift/simulator/burst?count=' + count, { method: 'POST' });

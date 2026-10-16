@@ -116,3 +116,9 @@ POST {{hubUrl}}/swift/simulator/burst?count=20
 ### -------------------------------------------------------------------------
 # Pause all automated background traffic simulation.
 POST {{hubUrl}}/swift/simulator/stop
+
+### -------------------------------------------------------------------------
+### 11. Traffic Simulator - Check Status
+### -------------------------------------------------------------------------
+# Returns RUNNING or STOPPED along with the current interval.
+GET {{hubUrl}}/swift/simulator/status

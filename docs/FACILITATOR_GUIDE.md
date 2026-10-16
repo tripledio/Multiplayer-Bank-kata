@@ -83,7 +83,11 @@ Open `requests/swift-hub.http` directly in IntelliJ IDEA:
    ```bash
    curl -X POST "http://localhost:9000/swift/simulator/stop"
    ```
-5. **Inspect Audit Ledger**:
+5. **Check Simulator Status**:
+   ```bash
+   curl -s http://localhost:9000/swift/simulator/status
+   ```
+6. **Inspect Audit Ledger**:
    ```bash
    curl -s http://localhost:9000/swift/ledger
    ```

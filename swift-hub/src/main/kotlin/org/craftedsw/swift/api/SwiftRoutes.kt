@@ -150,6 +150,11 @@ fun Application.swiftHubModule(
             call.respond(HttpStatusCode.OK, state)
         }
 
+        get("/swift/simulator/status") {
+            val status = if (trafficSimulator.isSimulatorRunning()) "RUNNING" else "STOPPED"
+            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = status, intervalMs = trafficSimulator.getIntervalMs()))
+        }
+
         post("/swift/simulator/start") {
             val intervalMs = call.request.queryParameters["intervalMs"]?.toLongOrNull() ?: 2000L
             trafficSimulator.start(intervalMs)
