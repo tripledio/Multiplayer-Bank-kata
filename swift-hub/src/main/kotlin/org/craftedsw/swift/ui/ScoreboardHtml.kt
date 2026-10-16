@@ -108,6 +108,8 @@ object ScoreboardHtml {
                             <button id="btnToggleSim" class="btn btn-success btn-control" onclick="toggleSim()">▶ Start Traffic Sim</button>
                             <button class="btn btn-primary btn-control" onclick="triggerBurst(5)">⚡ Fire 5 Tx Burst</button>
                             <button class="btn btn-warning btn-control" onclick="triggerBurst(20)">💥 Fire 20 Tx Surge</button>
+                            <button class="btn btn-outline-info btn-control" onclick="runDepositScenario('deposit-positive')">🧪 Test +50€ Deposit</button>
+                            <button class="btn btn-outline-danger btn-control" onclick="runDepositScenario('deposit-negative')">🧪 Test -50€ Deposit</button>
                             <span id="simStatus" class="badge bg-secondary ms-auto">Simulator: Idle</span>
                         </div>
                     </div>
@@ -577,6 +579,23 @@ object ScoreboardHtml {
         async function triggerBurst(count) {
             await fetch('/swift/simulator/burst?count=' + count, { method: 'POST' });
             pollState();
+        }
+
+        async function runDepositScenario(type) {
+            try {
+                const res = await fetch('/swift/simulator/scenario/' + type, { method: 'POST' });
+                const data = await res.json();
+                if (data.results && data.results.length > 0) {
+                    const summary = data.results.map(r => (r.passed ? '✅ ' : '❌ ') + r.bankName + ' (' + r.bic + '): ' + r.message).join('\n');
+                    alert('Scenario Results:\n' + summary);
+                } else {
+                    alert('No registered banks to run scenario.');
+                }
+                pollState();
+            } catch (e) {
+                console.error('Failed to run deposit scenario:', e);
+                alert('Failed to execute scenario: ' + e);
+            }
         }
     </script>
 </body>

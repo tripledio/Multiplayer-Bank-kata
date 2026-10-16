@@ -165,5 +165,15 @@ data class LedgerResponse(
 data class SimulatorStatusResponse(
     val status: String,
     val intervalMs: Long? = null,
-    val count: Int? = null
+    val count: Int? = null,
+    val results: List<ScenarioResult>? = null
+)
+
+@Serializable
+data class ScenarioResult(
+    val bic: String,
+    val bankName: String,
+    val scenario: String,
+    val passed: Boolean,
+    val message: String
 )

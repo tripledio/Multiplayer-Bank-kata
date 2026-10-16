@@ -122,3 +122,21 @@ POST {{hubUrl}}/swift/simulator/stop
 ### -------------------------------------------------------------------------
 # Returns RUNNING or STOPPED along with the current interval.
 GET {{hubUrl}}/swift/simulator/status
+
+### -------------------------------------------------------------------------
+### 12. Traffic Simulator - One-off Deposit Test Scenario (+50.00 EUR)
+### -------------------------------------------------------------------------
+# Run positive deposit scenario for each registered bank: deposit 50 EUR and assert 50 EUR balance.
+POST {{hubUrl}}/swift/simulator/scenario/deposit-positive
+
+### -------------------------------------------------------------------------
+### 13. Traffic Simulator - One-off Deposit Test Scenario (-50.00 EUR)
+### -------------------------------------------------------------------------
+# Run negative deposit scenario for each registered bank: deposit -50 EUR, assert error received and not 0 EUR in account.
+POST {{hubUrl}}/swift/simulator/scenario/deposit-negative
+
+### -------------------------------------------------------------------------
+### 14. Traffic Simulator - Run All Deposit Test Scenarios
+### -------------------------------------------------------------------------
+# Run all one-off deposit test scenarios for all registered banks.
+POST {{hubUrl}}/swift/simulator/scenario/deposit

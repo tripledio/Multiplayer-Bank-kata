@@ -171,5 +171,20 @@ fun Application.swiftHubModule(
             val executed = trafficSimulator.triggerBurst(count)
             call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "BURST_EXECUTED", count = executed))
         }
+
+        post("/swift/simulator/scenario/deposit-positive") {
+            val results = trafficSimulator.runPositiveDepositScenario()
+            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
+        }
+
+        post("/swift/simulator/scenario/deposit-negative") {
+            val results = trafficSimulator.runNegativeDepositScenario()
+            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
+        }
+
+        post("/swift/simulator/scenario/deposit") {
+            val results = trafficSimulator.runAllDepositScenarios()
+            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
+        }
     }
 }

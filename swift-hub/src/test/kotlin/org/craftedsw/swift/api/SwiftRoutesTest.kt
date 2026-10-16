@@ -284,4 +284,33 @@ class SwiftRoutesTest {
         assertThat(body.bic).hasSize(8)
         assertThat(body.bic).startsWith("DELT")
     }
+
+    @Test
+    fun `deposit scenario endpoints should return scenario execution status`() = testApplication {
+        application {
+            swiftHubModule()
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+        }
+
+        val posRes = client.post("/swift/simulator/scenario/deposit-positive")
+        assertThat(posRes.status).isEqualTo(HttpStatusCode.OK)
+        val posBody = posRes.body<SimulatorStatusResponse>()
+        assertThat(posBody.status).isEqualTo("SCENARIO_EXECUTED")
+        assertThat(posBody.results).isNotNull
+
+        val negRes = client.post("/swift/simulator/scenario/deposit-negative")
+        assertThat(negRes.status).isEqualTo(HttpStatusCode.OK)
+        val negBody = negRes.body<SimulatorStatusResponse>()
+        assertThat(negBody.status).isEqualTo("SCENARIO_EXECUTED")
+        assertThat(negBody.results).isNotNull
+
+        val allRes = client.post("/swift/simulator/scenario/deposit")
+        assertThat(allRes.status).isEqualTo(HttpStatusCode.OK)
+        val allBody = allRes.body<SimulatorStatusResponse>()
+        assertThat(allBody.status).isEqualTo("SCENARIO_EXECUTED")
+        assertThat(allBody.results).isNotNull
+    }
 }
