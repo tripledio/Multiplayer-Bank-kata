@@ -141,7 +141,8 @@ object RegisterHtml {
                 btn.innerText = '✅ Copied!';
                 setTimeout(() => { btn.innerText = orig; }, 2000);
             }).catch(() => {
-                alert('Copied: ' + currentCommand);
+                const btn = document.getElementById('btnCopyCmd');
+                btn.innerText = '⚠️ Please select & copy command manually';
             });
         }
 

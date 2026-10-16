@@ -102,7 +102,10 @@ object ScoreboardHtml {
 
                 <!-- Facilitator Controls -->
                 <div class="card mb-3">
-                    <div class="card-header">⚡ Facilitator Simulation Controls</div>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>⚡ Facilitator Simulation Controls</span>
+                        <span id="simStatus" class="badge bg-secondary">Simulator: Idle</span>
+                    </div>
                     <div class="card-body">
                         <div class="d-flex flex-wrap gap-2 align-items-center">
                             <button id="btnToggleSim" class="btn btn-success btn-control" onclick="toggleSim()">▶ Start Traffic Sim</button>
@@ -110,7 +113,15 @@ object ScoreboardHtml {
                             <button class="btn btn-warning btn-control" onclick="triggerBurst(20)">💥 Fire 20 Tx Surge</button>
                             <button class="btn btn-outline-info btn-control" onclick="runDepositScenario('deposit-positive')">🧪 Test +50€ Deposit</button>
                             <button class="btn btn-outline-danger btn-control" onclick="runDepositScenario('deposit-negative')">🧪 Test -50€ Deposit</button>
-                            <span id="simStatus" class="badge bg-secondary ms-auto">Simulator: Idle</span>
+                        </div>
+                        <div id="scenarioResultBox" class="mt-3 d-none">
+                            <div class="alert alert-dark border-secondary mb-0 p-3" role="alert">
+                                <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
+                                    <strong class="text-info" id="scenarioResultTitle">🧪 Test Scenario Results</strong>
+                                    <button type="button" class="btn-close btn-close-white btn-sm" onclick="dismissScenarioResults()" aria-label="Close"></button>
+                                </div>
+                                <div id="scenarioResultContent"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -581,20 +592,54 @@ object ScoreboardHtml {
             pollState();
         }
 
+        function dismissScenarioResults() {
+            const box = document.getElementById('scenarioResultBox');
+            if (box) box.classList.add('d-none');
+        }
+
         async function runDepositScenario(type) {
+            const box = document.getElementById('scenarioResultBox');
+            const titleEl = document.getElementById('scenarioResultTitle');
+            const contentEl = document.getElementById('scenarioResultContent');
+            if (!box || !contentEl) return;
+
+            const scenarioName = type === 'deposit-positive' ? '+50.00 EUR Deposit Test' :
+                                 type === 'deposit-negative' ? '-50.00 EUR Negative Deposit Test' :
+                                 'Deposit Test Scenarios';
+            titleEl.innerHTML = '🧪 ' + scenarioName;
+            contentEl.innerHTML = '<div class="text-secondary small d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-info" role="status"></div> Executing scenario across all banks...</div>';
+            box.classList.remove('d-none');
+
             try {
                 const res = await fetch('/swift/simulator/scenario/' + type, { method: 'POST' });
                 const data = await res.json();
                 if (data.results && data.results.length > 0) {
-                    const summary = data.results.map(r => (r.passed ? '✅ ' : '❌ ') + r.bankName + ' (' + r.bic + '): ' + r.message).join('\n');
-                    alert('Scenario Results:\n' + summary);
+                    const allPassed = data.results.every(r => r.passed);
+                    let html = '<div class="mb-2 small ' + (allPassed ? 'text-success' : 'text-warning') + ' fw-semibold">' +
+                        (allPassed ? '✅ All tests passed successfully!' : '⚠️ Some tests encountered issues:') +
+                        '</div><div class="list-group list-group-flush rounded bg-transparent">';
+                    data.results.forEach(r => {
+                        const badgeClass = r.passed ? 'bg-success' : 'bg-danger';
+                        const badgeText = r.passed ? 'PASSED' : 'FAILED';
+                        html += `
+                            <div class="list-group-item bg-transparent text-light border-secondary px-2 py-2 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-bold">${'$'}{r.bankName} <code class="text-info">${'$'}{r.bic}</code></div>
+                                    <div class="small text-secondary">${'$'}{r.message}</div>
+                                </div>
+                                <span class="badge ${'$'}{badgeClass}">${'$'}{badgeText}</span>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    contentEl.innerHTML = html;
                 } else {
-                    alert('No registered banks to run scenario.');
+                    contentEl.innerHTML = '<div class="text-warning small">⚠️ No registered banks found to run scenario. Connect a bank node first.</div>';
                 }
                 pollState();
             } catch (e) {
                 console.error('Failed to run deposit scenario:', e);
-                alert('Failed to execute scenario: ' + e);
+                contentEl.innerHTML = '<div class="text-danger small">❌ Failed to execute scenario: ' + e + '</div>';
             }
         }
     </script>
