@@ -198,5 +198,15 @@ fun Application.swiftHubModule(
             val results = trafficSimulator.runAllDepositScenarios()
             call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
         }
+
+        post("/swift/simulator/scenario/withdraw") {
+            val results = trafficSimulator.runDepositWithdrawScenario()
+            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
+        }
+
+        post("/swift/simulator/scenario/all") {
+            val results = trafficSimulator.runAllScenarios()
+            call.respond(HttpStatusCode.OK, SimulatorStatusResponse(status = "SCENARIO_EXECUTED", results = results))
+        }
     }
 }

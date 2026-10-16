@@ -175,5 +175,7 @@ data class ScenarioResult(
     val bankName: String,
     val scenario: String,
     val passed: Boolean,
-    val message: String
+    val message: String,
+    val expected: String = "",
+    val actual: String = ""
 )

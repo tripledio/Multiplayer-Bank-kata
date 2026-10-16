@@ -110,6 +110,8 @@ class TrafficSimulatorTest {
         assertThat(results.first().passed).isTrue()
         assertThat(results.first().bic).isEqualTo("BANKAXXX")
         assertThat(results.first().scenario).isEqualTo("DEPOSIT_50_EUR")
+        assertThat(results.first().expected).contains("Balance 50.00 EUR")
+        assertThat(results.first().actual).contains("Balance 50.00 EUR")
         assertThat(bankRegistry.getBank(Bic("BANKAXXX"))?.totalMoneyCents).isEqualTo(5000L)
     }
 
@@ -153,6 +155,8 @@ class TrafficSimulatorTest {
         assertThat(results.first().passed).isTrue()
         assertThat(results.first().bic).isEqualTo("BANKAXXX")
         assertThat(results.first().scenario).isEqualTo("DEPOSIT_NEGATIVE_50_EUR")
+        assertThat(results.first().expected).contains("Expected: Error")
+        assertThat(results.first().actual).contains("Actual: HTTP 400")
     }
 
     @Test
@@ -176,5 +180,135 @@ class TrafficSimulatorTest {
 
         assertThat(results).hasSize(1)
         assertThat(results.first().passed).isFalse()
+        assertThat(results.first().expected).contains("Expected: Error")
+        assertThat(results.first().actual).contains("Actual: Deposit accepted with HTTP 200 OK")
+    }
+
+    @Test
+    fun `should execute deposit and withdraw scenario successfully comparing ledger to actual statement`() = runTest {
+        bankRegistry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "http://alpha:8080"))
+
+        val mockEngine = MockEngine { request ->
+            val url = request.url.encodedPath
+            if (url.endsWith("/api/deposit")) {
+                respond(
+                    content = Json.encodeToString(BalanceResponse(iban = "BE68BANKA0001234567", balanceCents = 5000L)),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else if (url.endsWith("/api/withdraw")) {
+                respond(
+                    content = Json.encodeToString(BalanceResponse(iban = "BE68BANKA0001234567", balanceCents = 3000L)),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else if (url.contains("/api/statement")) {
+                respond(
+                    content = Json.encodeToString(
+                        StatementResponse(
+                            iban = "BE68BANKA0001234567",
+                            lines = listOf(
+                                StatementLineDto(date = "16/10/2026", debit = "20.00", balance = "30.00"),
+                                StatementLineDto(date = "16/10/2026", credit = "50.00", balance = "50.00")
+                            ),
+                            currentBalanceCents = 3000L
+                        )
+                    ),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else {
+                respond(content = "Not Found", status = HttpStatusCode.NotFound)
+            }
+        }
+
+        val mockHttpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) { json() }
+        }
+
+        val sim = TrafficSimulator(bankRegistry, transferRouter, mockHttpClient)
+        val results = sim.runDepositWithdrawScenario()
+
+        assertThat(results).hasSize(1)
+        val r = results.first()
+        assertThat(r.passed).isTrue()
+        assertThat(r.scenario).isEqualTo("DEPOSIT_50_WITHDRAW_20_EUR")
+        assertThat(r.expected).contains("Balance 30.00 EUR | Statement (2 lines)")
+        assertThat(r.actual).contains("Balance 30.00 EUR | Statement (2 lines)")
+    }
+
+    @Test
+    fun `deposit and withdraw scenario should fail if bank statement lines do not match expected ledger`() = runTest {
+        bankRegistry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "http://alpha:8080"))
+
+        val mockEngine = MockEngine { request ->
+            val url = request.url.encodedPath
+            if (url.endsWith("/api/deposit")) {
+                respond(
+                    content = Json.encodeToString(BalanceResponse(iban = "BE68BANKA0001234567", balanceCents = 5000L)),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else if (url.endsWith("/api/withdraw")) {
+                respond(
+                    content = Json.encodeToString(BalanceResponse(iban = "BE68BANKA0001234567", balanceCents = 3000L)),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else if (url.contains("/api/statement")) {
+                // Bank returns incorrect statement lines
+                respond(
+                    content = Json.encodeToString(
+                        StatementResponse(
+                            iban = "BE68BANKA0001234567",
+                            lines = listOf(
+                                StatementLineDto(date = "16/10/2026", credit = "10.00", balance = "10.00")
+                            ),
+                            currentBalanceCents = 3000L
+                        )
+                    ),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else {
+                respond(content = "Not Found", status = HttpStatusCode.NotFound)
+            }
+        }
+
+        val mockHttpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) { json() }
+        }
+
+        val sim = TrafficSimulator(bankRegistry, transferRouter, mockHttpClient)
+        val results = sim.runDepositWithdrawScenario()
+
+        assertThat(results).hasSize(1)
+        val r = results.first()
+        assertThat(r.passed).isFalse()
+        assertThat(r.expected).contains("Balance 30.00 EUR | Statement (2 lines)")
+        assertThat(r.actual).contains("Balance 30.00 EUR | Statement (1 line)")
+    }
+
+    @Test
+    fun `ScenarioLedger should track running balance and expected statement lines`() {
+        val ledger = ScenarioLedger("BE68BANKA0001234567")
+        ledger.recordDeposit(5000L)
+        ledger.recordWithdraw(2000L)
+
+        assertThat(ledger.expectedBalanceCents).isEqualTo(3000L)
+        assertThat(ledger.shouldAccountExist).isTrue()
+
+        val lines = ledger.getExpectedStatementLines()
+        assertThat(lines).hasSize(2)
+        // Reverse chronological order
+        assertThat(lines[0].debit).isEqualTo("20.00")
+        assertThat(lines[0].credit).isNull()
+        assertThat(lines[0].balance).isEqualTo("30.00")
+
+        assertThat(lines[1].credit).isEqualTo("50.00")
+        assertThat(lines[1].debit).isNull()
+        assertThat(lines[1].balance).isEqualTo("50.00")
+
+        assertThat(ledger.formatExpectedSummary()).contains("Expected: Balance 30.00 EUR | Statement (2 lines)")
     }
 }

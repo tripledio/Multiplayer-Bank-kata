@@ -313,6 +313,18 @@ class SwiftRoutesTest {
         val allBody = allRes.body<SimulatorStatusResponse>()
         assertThat(allBody.status).isEqualTo("SCENARIO_EXECUTED")
         assertThat(allBody.results).isNotNull
+
+        val withdrawRes = client.post("/swift/simulator/scenario/withdraw")
+        assertThat(withdrawRes.status).isEqualTo(HttpStatusCode.OK)
+        val withdrawBody = withdrawRes.body<SimulatorStatusResponse>()
+        assertThat(withdrawBody.status).isEqualTo("SCENARIO_EXECUTED")
+        assertThat(withdrawBody.results).isNotNull
+
+        val runAllRes = client.post("/swift/simulator/scenario/all")
+        assertThat(runAllRes.status).isEqualTo(HttpStatusCode.OK)
+        val runAllBody = runAllRes.body<SimulatorStatusResponse>()
+        assertThat(runAllBody.status).isEqualTo("SCENARIO_EXECUTED")
+        assertThat(runAllBody.results).isNotNull
     }
 
     @Test

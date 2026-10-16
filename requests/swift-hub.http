@@ -136,7 +136,13 @@ POST {{hubUrl}}/swift/simulator/scenario/deposit-positive
 POST {{hubUrl}}/swift/simulator/scenario/deposit-negative
 
 ### -------------------------------------------------------------------------
-### 14. Traffic Simulator - Run All Deposit Test Scenarios
+### 14. Traffic Simulator - One-off Deposit & Withdraw Test Scenario
 ### -------------------------------------------------------------------------
-# Run all one-off deposit test scenarios for all registered banks.
-POST {{hubUrl}}/swift/simulator/scenario/deposit
+# Run deposit & withdraw scenario for each registered bank: deposit 50 EUR, withdraw 20 EUR, assert 30 EUR balance and statement lines.
+POST {{hubUrl}}/swift/simulator/scenario/withdraw
+
+### -------------------------------------------------------------------------
+### 15. Traffic Simulator - Run All Test Scenarios (With Statement Verification)
+### -------------------------------------------------------------------------
+# Run all one-off test scenarios for all registered banks (comparing expected ledger vs actual bank statement).
+POST {{hubUrl}}/swift/simulator/scenario/all

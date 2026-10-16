@@ -114,6 +114,8 @@ object ScoreboardHtml {
                             <button class="btn btn-warning btn-control" onclick="triggerBurst(20)">💥 Fire 20 Tx Surge</button>
                             <button class="btn btn-outline-info btn-control" onclick="runDepositScenario('deposit-positive')">🧪 Test +50€ Deposit</button>
                             <button class="btn btn-outline-danger btn-control" onclick="runDepositScenario('deposit-negative')">🧪 Test -50€ Deposit</button>
+                            <button class="btn btn-outline-warning btn-control" onclick="runDepositScenario('withdraw')">🧪 Test Deposit & Withdraw</button>
+                            <button class="btn btn-outline-light btn-control" onclick="runDepositScenario('all')">🧪 Run All Scenarios</button>
                         </div>
                         <div id="scenarioResultBox" class="mt-3 d-none">
                             <div class="alert alert-dark border-secondary mb-0 p-3" role="alert">
@@ -623,6 +625,16 @@ object ScoreboardHtml {
             if (box) box.classList.add('d-none');
         }
 
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
         async function runDepositScenario(type) {
             const box = document.getElementById('scenarioResultBox');
             const titleEl = document.getElementById('scenarioResultTitle');
@@ -631,7 +643,8 @@ object ScoreboardHtml {
 
             const scenarioName = type === 'deposit-positive' ? '+50.00 EUR Deposit Test' :
                                  type === 'deposit-negative' ? '-50.00 EUR Negative Deposit Test' :
-                                 'Deposit Test Scenarios';
+                                 type === 'withdraw' ? 'Deposit & Withdraw Test' :
+                                 'All Test Scenarios';
             titleEl.innerHTML = '🧪 ' + scenarioName;
             contentEl.innerHTML = '<div class="text-secondary small d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-info" role="status"></div> Executing scenario across all banks...</div>';
             box.classList.remove('d-none');
@@ -648,12 +661,22 @@ object ScoreboardHtml {
                         const badgeClass = r.passed ? 'bg-success' : 'bg-danger';
                         const badgeText = r.passed ? 'PASSED' : 'FAILED';
                         html += `
-                            <div class="list-group-item bg-transparent text-light border-secondary px-2 py-2 d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="fw-bold">${'$'}{r.bankName} <code class="text-info">${'$'}{r.bic}</code></div>
-                                    <div class="small text-secondary">${'$'}{r.message}</div>
+                            <div class="list-group-item bg-dark bg-opacity-75 text-light border-secondary px-3 py-2 mb-2 rounded">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <div>
+                                        <span class="fw-bold">${'$'}{escapeHtml(r.bankName)}</span>
+                                        <code class="text-info ms-1">${'$'}{escapeHtml(r.bic)}</code>
+                                        <span class="badge bg-secondary ms-2">${'$'}{escapeHtml(r.scenario)}</span>
+                                    </div>
+                                    <span class="badge ${'$'}{badgeClass}">${'$'}{badgeText}</span>
                                 </div>
-                                <span class="badge ${'$'}{badgeClass}">${'$'}{badgeText}</span>
+                                <div class="small text-secondary mb-2">${'$'}{escapeHtml(r.message)}</div>
+                                ${'$'}{r.expected || r.actual ? `
+                                <div class="bg-black bg-opacity-50 p-2 rounded small font-monospace border border-secondary">
+                                    <div class="text-success"><span class="text-secondary fw-semibold">Expected:</span> ${'$'}{escapeHtml(r.expected || 'N/A')}</div>
+                                    <div class="${'$'}{r.passed ? 'text-info' : 'text-danger'}"><span class="text-secondary fw-semibold">Actual:&nbsp;&nbsp;</span> ${'$'}{escapeHtml(r.actual || 'N/A')}</div>
+                                </div>
+                                ` : ''}
                             </div>
                         `;
                     });
