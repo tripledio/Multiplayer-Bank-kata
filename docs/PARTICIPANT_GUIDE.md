@@ -1,6 +1,34 @@
-# 🏦 Participant Quickstart Guide: Multiplayer Banking Kata
+# 🏦 Participant Guide: Multiplayer Banking Kata
 
-Welcome to the **Multiplayer Banking Kata**! In this session, you and your pairing partner will build a resilient banking node in Kotlin, practice **Outside-In TDD** and **Object Calisthenics**, and connect your node to a live inter-bank **SWIFT network** alongside all other workshop participants.
+## 🥑 Welcome to the Hipster FinTech Revolution!
+
+**Congratulations!** You and your pairing partner have just been picked to build the core IT system and transaction engine for a brand-new, up-and-coming **hipster neo-bank** (think artisanal accounts, craft transactions, and locally sourced micro-balances). ☕✨
+
+---
+
+### 📖 The Background Story
+
+Picture this: Your founders—sporting raw Japanese selvedge denim, riding vintage single-speed bamboo bicycles, and fueled exclusively by single-origin oat milk flat whites—just pitched an audacious vision to venture capitalists. The world doesn't need another soulless corporate conglomerate; it needs an ethical, friction-free, bespoke digital bank where every euro is treated like an artisanal pour-over.
+
+The seed funding is secured, the launch party is already being planned at a converted warehouse roastery, and the community is buzzing. Now, the spotlight is on you: **the founding engineering team**.
+
+---
+
+### 💡 The Lean & Agile Playbook: Ship Early, Learn from Feedback Loops
+
+In traditional enterprise banking, teams spend six months drawing UML diagrams, negotiating 400-page waterfall specification documents, and praying that everything magically integrates during a weekend release. 
+
+**Not here.**
+
+In true Lean Startup and Agile spirit, our hipster bank operates on **rapid feedback loops**, **continuous product discovery**, and **evolutionary architecture**:
+
+- 🚀 **Deliver Value Over Big-Bang Waterfalling**: Better to get small, working vertical slices (like basic deposits and withdrawals) into production immediately and earn points from real customers than spending the entire session gold-plating an unverified monolith in isolation.
+- 🔄 **Build-Measure-Learn Feedback Loops**: Deploy an MVP (Minimum Viable Product), wire your bank node into the live SWIFT clearing house, and let actual customer traffic and scoreboard metrics tell you how you're performing.
+- 🔍 **Continuous Product Discovery**: Treat every scenario as a learning hypothesis. As new customer demands and inter-bank clearing requirements emerge, discover what your domain model truly needs rather than over-engineering upfront.
+- 🧘 **Outside-In TDD & Object Calisthenics**: Write clean, test-driven domain logic guided by Calisthenics rules. Refactor mercilessly with the safety net of fast-running unit and acceptance tests.
+- 🛡️ **Fail Fast & Adapt**: When unexpected edge cases, rogue negative amounts, or traffic surges hit your endpoints, pivot quickly, patch your guards, and keep your balances watertight.
+
+Grab your pairing partner, spin up your tunnel, and let's disrupt modern banking one test at a time! 🚀
 
 ---
 

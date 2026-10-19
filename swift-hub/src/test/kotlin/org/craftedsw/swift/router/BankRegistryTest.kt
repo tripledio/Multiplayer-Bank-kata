@@ -129,7 +129,7 @@ class BankRegistryTest {
         registry.recordTransaction(Bic("BANKAXXX"), isSuccess = false, pointsAwarded = 0L)
         assertThat(registry.getBank(Bic("BANKAXXX"))?.status).isEqualTo("DOWN")
 
-        registry.recordTransaction(Bic("BANKAXXX"), isSuccess = true, pointsAwarded = 10L)
+        registry.updateStatus(Bic("BANKAXXX"), "HEALTHY", 10L, "OK (10ms)")
         assertThat(registry.getBank(Bic("BANKAXXX"))?.status).isEqualTo("HEALTHY")
     }
 

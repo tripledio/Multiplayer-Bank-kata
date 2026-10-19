@@ -108,8 +108,8 @@ class BankRegistry {
                 failedTransactions = if (!isSuccess) current.failedTransactions + 1 else current.failedTransactions,
                 score = (current.score + pointsAwarded).coerceAtLeast(0),
                 totalMoneyCents = if (isSuccess) current.totalMoneyCents + amountCents else current.totalMoneyCents,
-                status = if (isSuccess) "HEALTHY" else if (current.status == "DOWN") "DOWN" else if (current.failedTransactions > 3) "DEGRADED" else current.status,
-                lastSeenTimestamp = System.currentTimeMillis()
+                status = if (!isSuccess && current.failedTransactions > 3 && current.status != "DOWN") "DEGRADED" else current.status,
+                lastSeenTimestamp = if (isSuccess) System.currentTimeMillis() else current.lastSeenTimestamp
             )
         }
     }

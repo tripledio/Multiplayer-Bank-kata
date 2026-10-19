@@ -5,6 +5,8 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -105,6 +107,11 @@ class TransferRouter(
                     ignoreUnknownKeys = true
                     prettyPrint = true
                 })
+            }
+            defaultRequest {
+                header("ngrok-skip-browser-warning", "true")
+                header("bypass-tunnel-reminder", "true")
+                header("User-Agent", "SwiftHub/1.0")
             }
         }
     }

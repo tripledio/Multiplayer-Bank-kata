@@ -3,8 +3,11 @@ package org.craftedsw.swift.router
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
@@ -42,18 +45,78 @@ class BankHealthChecker(
         }
 
         val startTime = System.currentTimeMillis()
-        return try {
-            var response: HttpResponse = httpClient.get("$url/health")
-            if (response.status == HttpStatusCode.NotFound) {
-                // Fallback to /ping
-                response = httpClient.get("$url/ping")
+        val endpoints = listOf("/health", "/ping", "/api/health", "/api/ping")
+        var response: HttpResponse? = null
+        var lastException: Exception? = null
+
+        for (endpoint in endpoints) {
+            try {
+                val resp = httpClient.get("$url$endpoint") {
+                    header("ngrok-skip-browser-warning", "true")
+                    header("bypass-tunnel-reminder", "true")
+                    header("User-Agent", "SwiftHub/1.0")
+                    header("Accept", "application/json, text/plain, */*")
+                }
+                if (resp.status == HttpStatusCode.NotFound) {
+                    continue
+                }
+                response = resp
+                break
+            } catch (e: Exception) {
+                lastException = e
+                break
             }
+        }
 
-            val durationMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1L)
-            val statusCode = response.status.value
+        if (lastException != null) {
+            val errorMsg = when {
+                lastException is io.ktor.client.plugins.HttpRequestTimeoutException -> "Request timeout"
+                lastException is java.net.ConnectException -> "Connection refused"
+                lastException is java.net.UnknownHostException -> "Unknown host"
+                lastException.message?.isNotBlank() == true -> lastException.message!!.take(60)
+                else -> "Connection failed"
+            }
+            logger.debug("Health check exception for ${bank.name} (${bank.bic}): $errorMsg")
+            return bankRegistry.updateStatus(
+                Bic(bank.bic),
+                status = "DOWN",
+                latencyMs = null,
+                statusMessage = "Unreachable: $errorMsg"
+            ) ?: bank.copy(status = "DOWN", pingLatencyMs = null, statusMessage = "Unreachable: $errorMsg")
+        }
 
-            when {
-                response.status.value in 200..299 -> {
+        if (response == null) {
+            val msg = "HTTP 404 Not Found"
+            return bankRegistry.updateStatus(
+                Bic(bank.bic),
+                status = "DOWN",
+                latencyMs = null,
+                statusMessage = msg
+            ) ?: bank.copy(status = "DOWN", pingLatencyMs = null, statusMessage = msg)
+        }
+
+        val durationMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1L)
+        val statusCode = response.status.value
+
+        return when {
+            response.status.value in 200..299 -> {
+                val bodyText = try { response.bodyAsText().trim() } catch (_: Exception) { "" }
+                val isHtml = bodyText.startsWith("<!DOCTYPE html", ignoreCase = true) ||
+                    bodyText.startsWith("<html", ignoreCase = true) ||
+                    (bodyText.contains("<head", ignoreCase = true) && bodyText.contains("<body", ignoreCase = true)) ||
+                    bodyText.contains("ERR_NGROK_", ignoreCase = true) ||
+                    bodyText.contains("ngrok-error", ignoreCase = true)
+
+                if (isHtml) {
+                    val msg = "Tunnel returned HTML page (bank unreachable)"
+                    logger.warn("Health check for ${bank.name} (${bank.bic}) received HTML response from tunnel: $msg")
+                    bankRegistry.updateStatus(
+                        Bic(bank.bic),
+                        status = "DOWN",
+                        latencyMs = null,
+                        statusMessage = msg
+                    ) ?: bank.copy(status = "DOWN", pingLatencyMs = null, statusMessage = msg)
+                } else {
                     bankRegistry.updateStatus(
                         Bic(bank.bic),
                         status = "HEALTHY",
@@ -61,43 +124,28 @@ class BankHealthChecker(
                         statusMessage = "OK (${durationMs}ms)"
                     ) ?: bank.copy(status = "HEALTHY", pingLatencyMs = durationMs, statusMessage = "OK (${durationMs}ms)")
                 }
-                response.status == HttpStatusCode.ServiceUnavailable ||
-                response.status == HttpStatusCode.BadGateway ||
-                response.status == HttpStatusCode.GatewayTimeout -> {
-                    val msg = "HTTP $statusCode ${response.status.description}"
-                    logger.warn("Health check for ${bank.name} (${bank.bic}) failed: $msg")
-                    bankRegistry.updateStatus(
-                        Bic(bank.bic),
-                        status = "DOWN",
-                        latencyMs = null,
-                        statusMessage = msg
-                    ) ?: bank.copy(status = "DOWN", pingLatencyMs = null, statusMessage = msg)
-                }
-                else -> {
-                    val msg = "HTTP $statusCode ${response.status.description}"
-                    bankRegistry.updateStatus(
-                        Bic(bank.bic),
-                        status = "DOWN",
-                        latencyMs = null,
-                        statusMessage = msg
-                    ) ?: bank.copy(status = "DOWN", pingLatencyMs = null, statusMessage = msg)
-                }
             }
-        } catch (e: Exception) {
-            val errorMsg = when {
-                e is io.ktor.client.plugins.HttpRequestTimeoutException -> "Request timeout"
-                e is java.net.ConnectException -> "Connection refused"
-                e is java.net.UnknownHostException -> "Unknown host"
-                e.message?.isNotBlank() == true -> e.message!!.take(60)
-                else -> "Connection failed"
+            response.status == HttpStatusCode.ServiceUnavailable ||
+            response.status == HttpStatusCode.BadGateway ||
+            response.status == HttpStatusCode.GatewayTimeout -> {
+                val msg = "HTTP $statusCode ${response.status.description}"
+                logger.warn("Health check for ${bank.name} (${bank.bic}) failed: $msg")
+                bankRegistry.updateStatus(
+                    Bic(bank.bic),
+                    status = "DOWN",
+                    latencyMs = null,
+                    statusMessage = msg
+                ) ?: bank.copy(status = "DOWN", pingLatencyMs = null, statusMessage = msg)
             }
-            logger.debug("Health check exception for ${bank.name} (${bank.bic}): $errorMsg")
-            bankRegistry.updateStatus(
-                Bic(bank.bic),
-                status = "DOWN",
-                latencyMs = null,
-                statusMessage = "Unreachable: $errorMsg"
-            ) ?: bank.copy(status = "DOWN", pingLatencyMs = null, statusMessage = "Unreachable: $errorMsg")
+            else -> {
+                val msg = "HTTP $statusCode ${response.status.description}"
+                bankRegistry.updateStatus(
+                    Bic(bank.bic),
+                    status = "DOWN",
+                    latencyMs = null,
+                    statusMessage = msg
+                ) ?: bank.copy(status = "DOWN", pingLatencyMs = null, statusMessage = msg)
+            }
         }
     }
 
@@ -143,6 +191,12 @@ class BankHealthChecker(
                 requestTimeoutMillis = 2000
                 connectTimeoutMillis = 1500
                 socketTimeoutMillis = 1500
+            }
+            defaultRequest {
+                header("ngrok-skip-browser-warning", "true")
+                header("bypass-tunnel-reminder", "true")
+                header("User-Agent", "SwiftHub/1.0")
+                header("Accept", "application/json, text/plain, */*")
             }
         }
     }

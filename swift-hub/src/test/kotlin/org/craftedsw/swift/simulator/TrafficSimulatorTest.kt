@@ -185,6 +185,62 @@ class TrafficSimulatorTest {
     }
 
     @Test
+    fun `negative deposit scenario should fail and mark bank DOWN when tunnel returns 503`() = runTest {
+        bankRegistry.register(RegisterBankRequest(bic = "BANKDOWN", name = "Bank Down", webhookUrl = "http://down:8080"))
+
+        val mockEngine = MockEngine {
+            respond(
+                content = "503 Service Unavailable",
+                status = HttpStatusCode.ServiceUnavailable,
+                headers = headersOf(HttpHeaders.ContentType, "text/plain")
+            )
+        }
+
+        val mockHttpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) { json() }
+        }
+
+        val sim = TrafficSimulator(bankRegistry, transferRouter, mockHttpClient)
+        val results = sim.runNegativeDepositScenario()
+
+        assertThat(results).hasSize(1)
+        assertThat(results.first().passed).isFalse()
+        assertThat(results.first().message).contains("503")
+
+        val bankNode = bankRegistry.getBank(Bic("BANKDOWN"))
+        assertThat(bankNode?.status).isEqualTo("DOWN")
+        assertThat(bankNode?.statusMessage).isEqualTo("HTTP 503 Service Unavailable")
+    }
+
+    @Test
+    fun `negative withdrawal scenario should fail and mark bank DOWN when tunnel returns 502`() = runTest {
+        bankRegistry.register(RegisterBankRequest(bic = "BANK502X", name = "Bank 502", webhookUrl = "http://down:8080"))
+
+        val mockEngine = MockEngine {
+            respond(
+                content = "502 Bad Gateway",
+                status = HttpStatusCode.BadGateway,
+                headers = headersOf(HttpHeaders.ContentType, "text/plain")
+            )
+        }
+
+        val mockHttpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) { json() }
+        }
+
+        val sim = TrafficSimulator(bankRegistry, transferRouter, mockHttpClient)
+        val results = sim.runNegativeWithdrawScenario()
+
+        assertThat(results).hasSize(1)
+        assertThat(results.first().passed).isFalse()
+        assertThat(results.first().message).contains("502")
+
+        val bankNode = bankRegistry.getBank(Bic("BANK502X"))
+        assertThat(bankNode?.status).isEqualTo("DOWN")
+        assertThat(bankNode?.statusMessage).isEqualTo("HTTP 502 Bad Gateway")
+    }
+
+    @Test
     fun `should execute deposit and withdraw scenario successfully comparing ledger to actual statement`() = runTest {
         bankRegistry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "http://alpha:8080"))
 

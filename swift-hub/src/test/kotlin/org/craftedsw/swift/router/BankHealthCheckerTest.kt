@@ -148,6 +148,46 @@ class BankHealthCheckerTest {
     }
 
     @Test
+    fun `should mark bank DOWN when tunnel returns 200 OK with HTML landing page`() = runTest {
+        val mockEngine = MockEngine {
+            respond(
+                content = "<!DOCTYPE html><html><head><title>ngrok - Warning</title></head><body>You are about to visit an ngrok tunnel</body></html>",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "text/html")
+            )
+        }
+        val client = HttpClient(mockEngine)
+        val checker = BankHealthChecker(bankRegistry, client)
+
+        val bank = bankRegistry.register(
+            RegisterBankRequest(bic = "BANKHTML", name = "Bank Html", webhookUrl = "https://html.ngrok-free.app")
+        )
+
+        val result = checker.checkBank(bank)
+
+        assertThat(result.status).isEqualTo("DOWN")
+        assertThat(result.statusMessage).isEqualTo("Tunnel returned HTML page (bank unreachable)")
+    }
+
+    @Test
+    fun `should mark bank DOWN when all endpoints return 404`() = runTest {
+        val mockEngine = MockEngine {
+            respondError(HttpStatusCode.NotFound)
+        }
+        val client = HttpClient(mockEngine)
+        val checker = BankHealthChecker(bankRegistry, client)
+
+        val bank = bankRegistry.register(
+            RegisterBankRequest(bic = "BANK404X", name = "Bank 404", webhookUrl = "https://missing.loca.lt")
+        )
+
+        val result = checker.checkBank(bank)
+
+        assertThat(result.status).isEqualTo("DOWN")
+        assertThat(result.statusMessage).isEqualTo("HTTP 404 Not Found")
+    }
+
+    @Test
     fun `should check all registered banks concurrently`() = runTest {
         val mockEngine = MockEngine { request ->
             if (request.url.host.contains("alpha")) {
