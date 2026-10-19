@@ -28,6 +28,18 @@ In true Lean Startup and Agile spirit, our hipster bank operates on **rapid feed
 - 🧘 **Outside-In TDD & Object Calisthenics**: Write clean, test-driven domain logic guided by Calisthenics rules. Refactor mercilessly with the safety net of fast-running unit and acceptance tests.
 - 🛡️ **Fail Fast & Adapt**: When unexpected edge cases, rogue negative amounts, or traffic surges hit your endpoints, pivot quickly, patch your guards, and keep your balances watertight.
 
+---
+
+### 🎨 A Fun Manual Challenge: Human Craftsmanship Over AI Prompts
+
+This kata is designed to be a **fun, collaborative, hands-on programming challenge**. While prompting an AI assistant to generate `BankService` might be trivial, doing so takes all the fun, discovery, and learning out of the experience!
+
+Here is what will genuinely put you ahead and build a resilient bank:
+- 🧠 **Think Functionally & Customer-Oriented**: Design your API and business flows from the outside in, keeping the customer experience front and center. Modeling state transitions with pure functions, expressive types, and clear domain invariants keeps your code robust.
+- 🏛️ **Give Your Domain Some Body**: Avoid anemic CRUD structures with primitive obsession (raw strings and ints everywhere). Give your domain rich models, encapsulated business rules, and real domain language (e.g. dedicated value objects and aggregates).
+- 🛡️ **Prevent Regressions with Strong Test Nets**: As new phases unlock and traffic ramps up, you will continuously adapt your logic. Fast, comprehensive tests ensure you never break previously delivered functionality or leak customer money.
+- 🤝 **Pair & Hone Your Craft**: Enjoy pairing with your partner, discussing design trade-offs, and experiencing the thrill of seeing your green tests translate to live scoreboard points!
+
 Grab your pairing partner, spin up your tunnel, and let's disrupt modern banking one test at a time! 🚀
 
 ---

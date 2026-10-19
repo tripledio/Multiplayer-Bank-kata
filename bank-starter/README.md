@@ -10,6 +10,7 @@ Your founders pitched an artisanal, ethical banking experience to investors and 
 
 - **Iterative & Lean**: Don't waterfall the entire architecture upfront. Get an MVP running, connect to the central SWIFT Hub, and learn through fast feedback loops.
 - **Earn Points from Customers**: Delivering small, reliable features (deposits, withdrawals, statements, transfers) gets working software into production early and earns points on the live scoreboard.
+- **A Fun Manual Challenge**: Implementing `BankService` through AI is trivial and takes the fun out of it. Thinking functionally, keeping things customer-oriented, preventing regressions, and giving your domain rich body will give you the real winning edge!
 - **Product Discovery & TDD**: Practice Outside-In Test-Driven Development and Object Calisthenics to build an evolutionary, highly maintainable domain model.
 
 ---
