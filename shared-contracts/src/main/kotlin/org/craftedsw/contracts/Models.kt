@@ -127,7 +127,9 @@ data class BankNodeInfo(
     val failedTransactions: Long = 0,
     val score: Long = 0,
     val totalMoneyCents: Long = 0,
-    val lastSeenTimestamp: Long = 0
+    val lastSeenTimestamp: Long = 0,
+    val pingLatencyMs: Long? = null,
+    val statusMessage: String? = null
 )
 
 @Serializable
@@ -145,7 +147,9 @@ data class BankGraphNode(
     val name: String,
     val status: String,
     val totalMoneyCents: Long = 0,
-    val score: Long = 0
+    val score: Long = 0,
+    val pingLatencyMs: Long? = null,
+    val statusMessage: String? = null
 )
 
 @Serializable

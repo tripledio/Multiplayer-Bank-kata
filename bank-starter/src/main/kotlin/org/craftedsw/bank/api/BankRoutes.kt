@@ -52,7 +52,19 @@ fun Application.bankModule(
 
     routing {
         get("/health") {
-            call.respond(HealthResponse(status = "UP", bic = bic))
+            call.respond(HttpStatusCode.OK, HealthResponse(status = "UP", bic = bic))
+        }
+
+        get("/ping") {
+            call.respond(HttpStatusCode.OK, HealthResponse(status = "UP", bic = bic))
+        }
+
+        get("/api/health") {
+            call.respond(HttpStatusCode.OK, HealthResponse(status = "UP", bic = bic))
+        }
+
+        get("/api/ping") {
+            call.respond(HttpStatusCode.OK, HealthResponse(status = "UP", bic = bic))
         }
 
         post("/api/deposit") {

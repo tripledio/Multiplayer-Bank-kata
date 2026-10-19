@@ -37,6 +37,7 @@ import org.craftedsw.contracts.TransferResult
 import org.craftedsw.contracts.TransferStatus
 import org.craftedsw.contracts.UpdateBankUrlRequest
 import org.craftedsw.swift.router.AuditLedger
+import org.craftedsw.swift.router.BankHealthChecker
 import org.craftedsw.swift.router.BankRegistry
 import org.craftedsw.swift.router.TransferRouter
 import org.craftedsw.swift.simulator.TrafficSimulator
@@ -93,6 +94,7 @@ fun Application.swiftHubModule(
     auditLedger: AuditLedger = AuditLedger(),
     transferRouter: TransferRouter = TransferRouter(bankRegistry, auditLedger),
     trafficSimulator: TrafficSimulator = TrafficSimulator(bankRegistry, transferRouter),
+    bankHealthChecker: BankHealthChecker = BankHealthChecker(bankRegistry),
     credentials: FacilitatorCredentials = FacilitatorCredentials.fromEnv()
 ) {
     install(AutoHeadResponse)
@@ -142,6 +144,7 @@ fun Application.swiftHubModule(
         post("/swift/register") {
             val request = call.receive<RegisterBankRequest>()
             val node = bankRegistry.register(request)
+            bankHealthChecker.checkBank(node)
             call.respond(
                 HttpStatusCode.OK,
                 RegisterBankResponse(
@@ -155,6 +158,7 @@ fun Application.swiftHubModule(
         post("/register") {
             val request = call.receive<RegisterBankRequest>()
             val node = bankRegistry.register(request)
+            bankHealthChecker.checkBank(node)
             call.respond(
                 HttpStatusCode.OK,
                 RegisterBankResponse(
@@ -167,6 +171,16 @@ fun Application.swiftHubModule(
 
         get("/swift/banks") {
             call.respond(HttpStatusCode.OK, bankRegistry.getAllBanks())
+        }
+
+        get("/swift/ping") {
+            val results = bankHealthChecker.checkAllBanks()
+            call.respond(HttpStatusCode.OK, results)
+        }
+
+        post("/swift/ping") {
+            val results = bankHealthChecker.checkAllBanks()
+            call.respond(HttpStatusCode.OK, results)
         }
 
         post("/swift/transfers") {
@@ -191,6 +205,28 @@ fun Application.swiftHubModule(
                 call.respondText(ScoreboardHtml.render(), ContentType.Text.Html)
             }
 
+            get("/swift/banks/{bic}/ping") {
+                val bic = call.parameters["bic"].orEmpty()
+                val bank = bankRegistry.getBank(Bic(bic))
+                if (bank == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
+                } else {
+                    val checked = bankHealthChecker.checkBank(bank)
+                    call.respond(HttpStatusCode.OK, checked)
+                }
+            }
+
+            post("/swift/banks/{bic}/ping") {
+                val bic = call.parameters["bic"].orEmpty()
+                val bank = bankRegistry.getBank(Bic(bic))
+                if (bank == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
+                } else {
+                    val checked = bankHealthChecker.checkBank(bank)
+                    call.respond(HttpStatusCode.OK, checked)
+                }
+            }
+
             delete("/swift/banks/{bic}") {
                 val bic = call.parameters["bic"].orEmpty()
                 val removed = bankRegistry.remove(Bic(bic))
@@ -208,7 +244,8 @@ fun Application.swiftHubModule(
                 if (updated == null) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
                 } else {
-                    call.respond(HttpStatusCode.OK, updated)
+                    val checked = bankHealthChecker.checkBank(updated)
+                    call.respond(HttpStatusCode.OK, checked)
                 }
             }
 
@@ -219,7 +256,8 @@ fun Application.swiftHubModule(
                 if (updated == null) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
                 } else {
-                    call.respond(HttpStatusCode.OK, updated)
+                    val checked = bankHealthChecker.checkBank(updated)
+                    call.respond(HttpStatusCode.OK, checked)
                 }
             }
 
@@ -230,7 +268,8 @@ fun Application.swiftHubModule(
                 if (updated == null) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
                 } else {
-                    call.respond(HttpStatusCode.OK, updated)
+                    val checked = bankHealthChecker.checkBank(updated)
+                    call.respond(HttpStatusCode.OK, checked)
                 }
             }
 

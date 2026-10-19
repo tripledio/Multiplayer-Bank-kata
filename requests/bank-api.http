@@ -16,7 +16,19 @@ GET {{bankUrl}}/health
 > {%
     client.test("Bank health check returns 200 OK", function() {
         client.assert(response.status === 200, "Response status is not 200");
-        client.assert(response.body.status === "OK", "Bank status is not OK");
+        client.assert(response.body.status === "UP" || response.body.status === "OK", "Bank status is not UP/OK");
+    });
+%}
+
+### -------------------------------------------------------------------------
+### 1b. Node Ping Endpoint
+### -------------------------------------------------------------------------
+GET {{bankUrl}}/ping
+
+> {%
+    client.test("Bank ping returns 200 OK", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+        client.assert(response.body.status === "UP" || response.body.status === "OK", "Bank status is not UP/OK");
     });
 %}
 

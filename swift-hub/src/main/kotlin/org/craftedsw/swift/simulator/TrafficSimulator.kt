@@ -412,6 +412,14 @@ class TrafficSimulator(
         return executed
     }
 
+    private fun checkResponseTunnelStatus(bic: Bic, status: HttpStatusCode) {
+        if (status == HttpStatusCode.ServiceUnavailable ||
+            status == HttpStatusCode.BadGateway ||
+            status == HttpStatusCode.GatewayTimeout) {
+            bankRegistry.updateStatus(bic, "DOWN", null, "HTTP ${status.value} ${status.description}")
+        }
+    }
+
     suspend fun runPositiveDepositScenario(): List<ScenarioResult> {
         val banks = bankRegistry.getAllBanks()
         val results = mutableListOf<ScenarioResult>()
@@ -430,6 +438,7 @@ class TrafficSimulator(
                 }
 
                 if (depositResponse.status != HttpStatusCode.OK) {
+                    checkResponseTunnelStatus(Bic(bank.bic), depositResponse.status)
                     val errorBody = depositResponse.bodyAsText()
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                     results.add(
@@ -465,6 +474,7 @@ class TrafficSimulator(
 
                 // Verify statement/balance for the newly created IBAN
                 val statementResponse: HttpResponse = httpClient.get("${bank.webhookUrl}/api/statement/$iban")
+                checkResponseTunnelStatus(Bic(bank.bic), statementResponse.status)
                 val statement: StatementResponse? = if (statementResponse.status == HttpStatusCode.OK) statementResponse.body() else null
                 val actualStr = ScenarioLedger.formatActualSummary(statementResponse.status, statement)
 
@@ -525,8 +535,9 @@ class TrafficSimulator(
                     )
                 }
             } catch (e: Exception) {
-                logger.warn("Positive deposit scenario failed for ${bank.name}: ${e.message}")
-                bankRegistry.updateStatus(Bic(bank.bic), "DOWN")
+                val err = e.message ?: "Connection failed"
+                logger.warn("Positive deposit scenario failed for ${bank.name}: $err")
+                bankRegistry.updateStatus(Bic(bank.bic), "DOWN", null, "Unreachable: ${err.take(50)}")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                 results.add(
                     ScenarioResult(
@@ -534,9 +545,9 @@ class TrafficSimulator(
                         bankName = bank.name,
                         scenario = "DEPOSIT_50_EUR",
                         passed = false,
-                        message = "Exception during test: ${e.message}",
+                        message = "Exception during test: $err",
                         expected = expectedStr,
-                        actual = "Actual: Exception: ${e.message}"
+                        actual = "Actual: Exception: $err"
                     )
                 )
             }

@@ -1,6 +1,9 @@
 package org.craftedsw.swift.api
 
+import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.basicAuth
 import io.ktor.client.request.delete
@@ -13,6 +16,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.testApplication
 import org.assertj.core.api.Assertions.assertThat
@@ -28,6 +32,7 @@ import org.craftedsw.contracts.TransferResult
 import org.craftedsw.contracts.TransferStatus
 import org.craftedsw.contracts.UpdateBankUrlRequest
 import org.craftedsw.swift.router.AuditLedger
+import org.craftedsw.swift.router.BankHealthChecker
 import org.craftedsw.swift.router.BankRegistry
 import org.craftedsw.swift.router.TransferRouter
 import org.junit.jupiter.api.Test
@@ -310,17 +315,21 @@ class SwiftRoutesTest {
         assertThat(scoreboardHtml).contains("SWIFT Network Clearing House")
         assertThat(scoreboardHtml).contains("Register Your Bank")
         assertThat(scoreboardHtml).contains("qrcode")
-        assertThat(scoreboardHtml).contains("moneyPieChart")
-        assertThat(scoreboardHtml).contains("moneyLineChart")
+        assertThat(scoreboardHtml).contains("depositMoneyLineChart")
+        assertThat(scoreboardHtml).contains("withdrawalMoneyLineChart")
+        assertThat(scoreboardHtml).contains("pointsLineChart")
         assertThat(scoreboardHtml).contains("chart.js")
-        assertThat(scoreboardHtml).contains("Total Money per Bank")
-        assertThat(scoreboardHtml).contains("Bank Money Timeline")
+        assertThat(scoreboardHtml).contains("Deposits Money Timeline")
+        assertThat(scoreboardHtml).contains("Withdrawals Money Timeline")
+        assertThat(scoreboardHtml).contains("Participant Points Evolution")
         assertThat(scoreboardHtml).contains("Scenario 1 (Hidden)")
         assertThat(scoreboardHtml).contains("isScenarioGreenForAll")
         assertThat(scoreboardHtml).contains("getScenarioDisplayName")
         assertThat(scoreboardHtml).contains("Network health")
         assertThat(scoreboardHtml).contains("Edit URL")
         assertThat(scoreboardHtml).contains("editTunnelModal")
+        assertThat(scoreboardHtml).contains("Transfer Network Graph")
+        assertThat(scoreboardHtml).contains("Live Settlement Feed")
     }
 
     @Test
@@ -515,8 +524,12 @@ class SwiftRoutesTest {
     fun `update bank webhook url endpoints should update url and require authentication`() = testApplication {
         val registry = BankRegistry()
         registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "https://alpha-old.loca.lt"))
+        val mockEngine = MockEngine {
+            respond("""{"status":"UP"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val checker = BankHealthChecker(registry, HttpClient(mockEngine))
         application {
-            swiftHubModule(bankRegistry = registry)
+            swiftHubModule(bankRegistry = registry, bankHealthChecker = checker)
         }
 
         val client = createClient {
@@ -557,5 +570,44 @@ class SwiftRoutesTest {
             setBody(UpdateBankUrlRequest(webhookUrl = "https://unknown.loca.lt"))
         }
         assertThat(notFoundRes.status).isEqualTo(HttpStatusCode.NotFound)
+    }
+
+    @Test
+    fun `ping endpoints should return health check results`() = testApplication {
+        val registry = BankRegistry()
+        registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "https://alpha.loca.lt"))
+        val mockEngine = MockEngine {
+            respond("""{"status":"UP"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val checker = BankHealthChecker(registry, HttpClient(mockEngine))
+        application {
+            swiftHubModule(bankRegistry = registry, bankHealthChecker = checker)
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+        }
+
+        // Global ping
+        val globalPing = client.get("/swift/ping")
+        assertThat(globalPing.status).isEqualTo(HttpStatusCode.OK)
+        val allBanks = globalPing.body<List<BankNodeInfo>>()
+        assertThat(allBanks).hasSize(1)
+        assertThat(allBanks.first().status).isEqualTo("HEALTHY")
+
+        // Single bank ping (requires auth)
+        val bankPing = client.get("/swift/banks/BANKAXXX/ping") {
+            basicAuth("admin", "admin")
+        }
+        assertThat(bankPing.status).isEqualTo(HttpStatusCode.OK)
+        val pingedBank = bankPing.body<BankNodeInfo>()
+        assertThat(pingedBank.bic).isEqualTo("BANKAXXX")
+        assertThat(pingedBank.status).isEqualTo("HEALTHY")
+
+        // Single bank ping unknown bank
+        val unknownPing = client.get("/swift/banks/UNKNOWN/ping") {
+            basicAuth("admin", "admin")
+        }
+        assertThat(unknownPing.status).isEqualTo(HttpStatusCode.NotFound)
     }
 }

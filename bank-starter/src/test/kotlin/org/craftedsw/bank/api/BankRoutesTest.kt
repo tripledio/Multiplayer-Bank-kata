@@ -38,6 +38,12 @@ class BankRoutesTest {
         val body = response.body<org.craftedsw.contracts.HealthResponse>()
         assertThat(body.status).isEqualTo("UP")
         assertThat(body.bic).isEqualTo("TESTBEXX")
+
+        val pingResponse = client.get("/ping")
+        assertThat(pingResponse.status).isEqualTo(HttpStatusCode.OK)
+        val pingBody = pingResponse.body<org.craftedsw.contracts.HealthResponse>()
+        assertThat(pingBody.status).isEqualTo("UP")
+        assertThat(pingBody.bic).isEqualTo("TESTBEXX")
     }
 
     @Test

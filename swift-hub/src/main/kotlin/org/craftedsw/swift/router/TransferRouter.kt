@@ -63,6 +63,9 @@ class TransferRouter(
             } else {
                 -5L
             }
+            if (response.status == TransferStatus.ACCEPTED) {
+                bankRegistry.updateStatus(destBic, "HEALTHY", durationMs, "OK (${durationMs}ms)")
+            }
             bankRegistry.recordTransaction(
                 destBic,
                 response.status == TransferStatus.ACCEPTED,
@@ -71,13 +74,14 @@ class TransferRouter(
             )
             response
         } catch (e: Exception) {
-            logger.warn("Transfer to ${destNode.name} (${destNode.bic}) failed: ${e.message}")
-            bankRegistry.updateStatus(destBic, "DOWN")
+            val err = e.message ?: "Connection failed"
+            logger.warn("Transfer to ${destNode.name} (${destNode.bic}) failed: $err")
+            bankRegistry.updateStatus(destBic, "DOWN", null, "Unreachable: ${err.take(50)}")
             bankRegistry.recordTransaction(destBic, false, -10L)
             TransferResult(
                 transactionId = txId,
                 status = TransferStatus.FAILED,
-                message = "Destination node unreachable: ${e.message}"
+                message = "Destination node unreachable: $err"
             )
         }
 

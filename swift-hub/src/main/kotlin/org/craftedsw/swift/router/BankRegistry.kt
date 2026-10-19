@@ -75,15 +75,27 @@ class BankRegistry {
             current.copy(
                 webhookUrl = newWebhookUrl.trim().trimEnd('/'),
                 status = "HEALTHY",
+                pingLatencyMs = null,
+                statusMessage = "URL updated",
                 lastSeenTimestamp = System.currentTimeMillis()
             )
         }
     }
 
-    fun updateStatus(bic: Bic, status: String) {
-        val targetBank = getBank(bic) ?: return
-        registry.computeIfPresent(targetBank.bic) { _, current ->
-            current.copy(status = status, lastSeenTimestamp = System.currentTimeMillis())
+    fun updateStatus(
+        bic: Bic,
+        status: String,
+        latencyMs: Long? = null,
+        statusMessage: String? = null
+    ): BankNodeInfo? {
+        val targetBank = getBank(bic) ?: return null
+        return registry.computeIfPresent(targetBank.bic) { _, current ->
+            current.copy(
+                status = status,
+                pingLatencyMs = if (status == "DOWN") null else (latencyMs ?: current.pingLatencyMs),
+                statusMessage = statusMessage ?: current.statusMessage,
+                lastSeenTimestamp = if (status == "HEALTHY") System.currentTimeMillis() else current.lastSeenTimestamp
+            )
         }
     }
 

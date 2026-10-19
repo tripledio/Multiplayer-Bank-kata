@@ -71,7 +71,9 @@ class AuditLedger {
                 name = bank.name,
                 status = bank.status,
                 totalMoneyCents = bank.totalMoneyCents,
-                score = bank.score
+                score = bank.score,
+                pingLatencyMs = bank.pingLatencyMs,
+                statusMessage = bank.statusMessage
             )
         }
 
@@ -88,7 +90,9 @@ class AuditLedger {
                     name = bank?.name ?: srcBic,
                     status = bank?.status ?: "UNKNOWN",
                     totalMoneyCents = bank?.totalMoneyCents ?: 0L,
-                    score = bank?.score ?: 0L
+                    score = bank?.score ?: 0L,
+                    pingLatencyMs = bank?.pingLatencyMs,
+                    statusMessage = bank?.statusMessage
                 )
             }
             if (!nodeMap.containsKey(dstBic)) {
@@ -98,7 +102,9 @@ class AuditLedger {
                     name = bank?.name ?: dstBic,
                     status = bank?.status ?: "UNKNOWN",
                     totalMoneyCents = bank?.totalMoneyCents ?: 0L,
-                    score = bank?.score ?: 0L
+                    score = bank?.score ?: 0L,
+                    pingLatencyMs = bank?.pingLatencyMs,
+                    statusMessage = bank?.statusMessage
                 )
             }
 

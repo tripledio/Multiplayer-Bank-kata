@@ -29,10 +29,10 @@ The hub saves its state (registered banks, scores, audit ledger, simulator on/of
 
 ```text
 Found a previous session: 4 bank(s), 312 transaction(s).
-Resume it? [Y/n] (n = start a new session):
+Resume it? [Y/n] (n = start a new session, defaulting to resume in 10s):
 ```
 
-Press Enter to resume, so connected banks keep working without registering again. Answer `n` to start fresh; the old state is kept as a `.bak` file next to it. Set `SWIFT_HUB_RESUME=true|false` to skip the question, and `SWIFT_HUB_STATE_FILE` to use another file.
+Press Enter or wait 10 seconds to resume, so connected banks keep working without registering again. Answer `n` to start fresh; the old state is kept as a `.bak` file next to it. Set `SWIFT_HUB_RESUME=true|false` to skip the question, and `SWIFT_HUB_STATE_FILE` to use another file.
 
 ### 2. Open the Projector Dashboard
 Open your browser to:

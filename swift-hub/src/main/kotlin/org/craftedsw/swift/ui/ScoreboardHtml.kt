@@ -78,13 +78,17 @@ object ScoreboardHtml {
             </div>
         </div>
 
-        <div class="row">
+        <!-- Top Section: Leaderboard & Registration -->
+        <div class="row g-3 mb-4">
             <!-- Leaderboard -->
-            <div class="col-lg-7">
-                <div class="card">
+            <div class="col-lg-8">
+                <div class="card h-100">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <span>🏆 Participant Bank Leaderboard</span>
-                        <span class="badge bg-secondary" id="bankCountBadge">0 registered</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <button class="btn btn-xs btn-outline-info py-0 px-2" style="font-size: 0.75rem;" onclick="pingAllBanks()" title="Test network connectivity to all banks">⚡ Ping All</button>
+                            <span class="badge bg-secondary" id="bankCountBadge">0 registered</span>
+                        </div>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -109,130 +113,181 @@ object ScoreboardHtml {
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- 3 Test Phases Control Center -->
-                <div class="card mb-4 border-info">
-                    <div class="card-header bg-dark bg-gradient d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="fs-5 fw-bold text-white">🧪 Test Simulator Phase Controllers</span>
-                            <span class="text-secondary small ms-2">• Evaluates registered banks every 10s • 1 point per scenario</span>
-                        </div>
-                        <div class="d-flex gap-2 align-items-center">
-                            <span id="simStatus" class="badge bg-secondary">Traffic: Idle</span>
-                            <button id="btnToggleSim" class="btn btn-sm btn-outline-secondary" onclick="toggleSim()">⚡ Background Traffic</button>
+            <!-- Participant Registration & QR Code -->
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>📱 Register Your Bank</span>
+                        <a href="/register" target="_blank" class="badge bg-primary text-decoration-none px-2 py-1">Open Page ↗</a>
+                    </div>
+                    <div class="card-body d-flex flex-column justify-content-center">
+                        <div class="d-flex align-items-center gap-3">
+                            <div id="qrcode" class="p-2 bg-white rounded shadow-sm d-flex align-items-center justify-content-center" style="min-width: 100px; min-height: 100px;"></div>
+                            <div>
+                                <div class="fw-bold text-white mb-1">Scan to Register Bank</div>
+                                <p class="text-secondary small mb-2">Scan with your phone or open the register page to get your generated 8-character BIC code.</p>
+                                <div><a id="regUrlLink" href="/register" target="_blank" class="text-info font-monospace small text-break"></a></div>
+                            </div>
                         </div>
                     </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <!-- Phase 1: Deposits Column -->
-                            <div class="col-md-4">
-                                <div class="card h-100 bg-black bg-opacity-25 border-secondary">
-                                    <div class="card-header d-flex justify-content-between align-items-center py-2">
-                                        <div>
-                                            <span class="fw-bold text-info">1. Deposits</span>
-                                            <div class="small text-secondary" style="font-size: 0.75rem;" id="phaseSubtitleDeposits">Automated evaluation</div>
-                                        </div>
-                                        <span id="phaseTimerDeposits" class="badge bg-dark border border-info font-monospace text-info">00:00</span>
-                                    </div>
-                                    <div class="card-body d-flex flex-column p-3">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <button id="btnPhaseDeposits" class="btn btn-sm btn-success fw-bold px-3" onclick="togglePhase('DEPOSITS')">▶ Play</button>
-                                            <button class="btn btn-sm btn-outline-info" onclick="runDepositScenario('deposit')">⚡ Run Now</button>
-                                        </div>
-                                        <div class="small text-secondary mb-2" id="phaseDescDeposits">
-                                            • Scenario 1 (Hidden)<br>
-                                            • Scenario 2 (Hidden)
-                                        </div>
-                                        <div id="phaseResultsDeposits" class="mt-auto border-top border-secondary pt-2 small text-secondary">
-                                            <em>Awaiting first evaluation...</em>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                </div>
+            </div>
+        </div>
 
-                            <!-- Phase 2: Withdrawals Column -->
-                            <div class="col-md-4">
-                                <div class="card h-100 bg-black bg-opacity-25 border-secondary">
-                                    <div class="card-header d-flex justify-content-between align-items-center py-2">
-                                        <div>
-                                            <span class="fw-bold text-warning">2. Withdrawals</span>
-                                            <div class="small text-secondary" style="font-size: 0.75rem;" id="phaseSubtitleWithdrawals">Automated evaluation</div>
-                                        </div>
-                                        <span id="phaseTimerWithdrawals" class="badge bg-dark border border-warning font-monospace text-warning">00:00</span>
-                                    </div>
-                                    <div class="card-body d-flex flex-column p-3">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <button id="btnPhaseWithdrawals" class="btn btn-sm btn-success fw-bold px-3" onclick="togglePhase('WITHDRAWALS')">▶ Play</button>
-                                            <button class="btn btn-sm btn-outline-warning" onclick="runDepositScenario('withdraw')">⚡ Run Now</button>
-                                        </div>
-                                        <div class="small text-secondary mb-2" id="phaseDescWithdrawals">
-                                            • Scenario 1 (Hidden)<br>
-                                            • Scenario 2 (Hidden)<br>
-                                            • Scenario 3 (Hidden)
-                                        </div>
-                                        <div id="phaseResultsWithdrawals" class="mt-auto border-top border-secondary pt-2 small text-secondary">
-                                            <em>Awaiting first evaluation...</em>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+        <!-- 3 Phase Scenarios & Visualizations Header -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h2 class="h5 text-white mb-0">🧪 Test Simulator Scenarios &amp; Visualizations</h2>
+                <span class="text-secondary small">• Automated evaluation every 10s • 1 point per scenario</span>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <span id="simStatus" class="badge bg-secondary">Traffic: Idle</span>
+                <button id="btnToggleSim" class="btn btn-sm btn-outline-secondary" onclick="toggleSim()">⚡ Background Traffic</button>
+            </div>
+        </div>
 
-                            <!-- Phase 3: Transfers Column -->
-                            <div class="col-md-4">
-                                <div class="card h-100 bg-black bg-opacity-25 border-secondary">
-                                    <div class="card-header d-flex justify-content-between align-items-center py-2">
-                                        <div>
-                                            <span class="fw-bold text-primary">3. Transfers</span>
-                                            <div class="small text-secondary" style="font-size: 0.75rem;" id="phaseSubtitleTransfers">Automated evaluation</div>
-                                        </div>
-                                        <span id="phaseTimerTransfers" class="badge bg-dark border border-primary font-monospace text-primary">00:00</span>
-                                    </div>
-                                    <div class="card-body d-flex flex-column p-3">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <button id="btnPhaseTransfers" class="btn btn-sm btn-success fw-bold px-3" onclick="togglePhase('TRANSFERS')">▶ Play</button>
-                                            <button class="btn btn-sm btn-outline-primary" onclick="runDepositScenario('transfer')">⚡ Run Now</button>
-                                        </div>
-                                        <div class="small text-secondary mb-2" id="phaseDescTransfers">
-                                            • Scenario 1 (Hidden)<br>
-                                            • Scenario 2 (Hidden)
-                                        </div>
-                                        <div id="phaseResultsTransfers" class="mt-auto border-top border-secondary pt-2 small text-secondary">
-                                            <em>Awaiting first evaluation...</em>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+        <!-- Manual Scenario Detailed Results Box -->
+        <div id="scenarioResultBox" class="mb-3 d-none">
+            <div class="alert alert-dark border-secondary mb-0 p-3" role="alert">
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
+                    <strong class="text-info" id="scenarioResultTitle">🧪 Test Scenario Results</strong>
+                    <button type="button" class="btn-close btn-close-white btn-sm" onclick="dismissScenarioResults()" aria-label="Close"></button>
+                </div>
+                <div id="scenarioResultContent"></div>
+            </div>
+        </div>
+
+        <!-- 3 Scenario Columns with Embedded Visualizations -->
+        <div class="row g-3 mb-4">
+            <!-- Column 1: Deposits -->
+            <div class="col-lg-4">
+                <!-- Phase 1: Deposits Scenario Card -->
+                <div class="card bg-black bg-opacity-25 border-info mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                        <div>
+                            <span class="fw-bold text-info">1. Deposits</span>
+                            <div class="small text-secondary" style="font-size: 0.75rem;" id="phaseSubtitleDeposits">Automated evaluation</div>
                         </div>
+                        <span id="phaseTimerDeposits" class="badge bg-dark border border-info font-monospace text-info">00:00</span>
+                    </div>
+                    <div class="card-body d-flex flex-column p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <button id="btnPhaseDeposits" class="btn btn-sm btn-success fw-bold px-3" onclick="togglePhase('DEPOSITS')">▶ Play</button>
+                            <button class="btn btn-sm btn-outline-info" onclick="runDepositScenario('deposit')">⚡ Run Now</button>
+                        </div>
+                        <div class="small text-secondary mb-2" id="phaseDescDeposits">
+                            • Scenario 1 (Hidden)<br>
+                            • Scenario 2 (Hidden)
+                        </div>
+                        <div id="phaseResultsDeposits" class="mt-auto border-top border-secondary pt-2 small text-secondary">
+                            <em>Awaiting first evaluation...</em>
+                        </div>
+                    </div>
+                </div>
 
-                        <!-- Manual Scenario Detailed Results Box -->
-                        <div id="scenarioResultBox" class="mt-3 d-none">
-                            <div class="alert alert-dark border-secondary mb-0 p-3" role="alert">
-                                <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
-                                    <strong class="text-info" id="scenarioResultTitle">🧪 Test Scenario Results</strong>
-                                    <button type="button" class="btn-close btn-close-white btn-sm" onclick="dismissScenarioResults()" aria-label="Close"></button>
-                                </div>
-                                <div id="scenarioResultContent"></div>
-                            </div>
+                <!-- Deposits Money Line Chart -->
+                <div class="card border-secondary">
+                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                        <span class="small fw-bold text-light">📈 Deposits Money Timeline</span>
+                        <span class="badge bg-dark border border-secondary text-info font-monospace small" id="depositsMoneyTotalBadge">€ 0.00</span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div style="position: relative; height: 260px;">
+                            <canvas id="depositMoneyLineChart"></canvas>
+                        </div>
+                        <div id="depositMoneyEmptyNotice" class="text-center py-4 text-secondary small d-none">
+                            Awaiting registered banks...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Column 2: Withdrawals -->
+            <div class="col-lg-4">
+                <!-- Phase 2: Withdrawals Scenario Card -->
+                <div class="card bg-black bg-opacity-25 border-warning mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                        <div>
+                            <span class="fw-bold text-warning">2. Withdrawals</span>
+                            <div class="small text-secondary" style="font-size: 0.75rem;" id="phaseSubtitleWithdrawals">Automated evaluation</div>
+                        </div>
+                        <span id="phaseTimerWithdrawals" class="badge bg-dark border border-warning font-monospace text-warning">00:00</span>
+                    </div>
+                    <div class="card-body d-flex flex-column p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <button id="btnPhaseWithdrawals" class="btn btn-sm btn-success fw-bold px-3" onclick="togglePhase('WITHDRAWALS')">▶ Play</button>
+                            <button class="btn btn-sm btn-outline-warning" onclick="runDepositScenario('withdraw')">⚡ Run Now</button>
+                        </div>
+                        <div class="small text-secondary mb-2" id="phaseDescWithdrawals">
+                            • Scenario 1 (Hidden)<br>
+                            • Scenario 2 (Hidden)<br>
+                            • Scenario 3 (Hidden)
+                        </div>
+                        <div id="phaseResultsWithdrawals" class="mt-auto border-top border-secondary pt-2 small text-secondary">
+                            <em>Awaiting first evaluation...</em>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Withdrawals Money Line Chart -->
+                <div class="card border-secondary">
+                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                        <span class="small fw-bold text-light">📉 Withdrawals Money Timeline</span>
+                        <span class="badge bg-dark border border-secondary text-warning font-monospace small" id="withdrawalsMoneyTotalBadge">€ 0.00</span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div style="position: relative; height: 260px;">
+                            <canvas id="withdrawalMoneyLineChart"></canvas>
+                        </div>
+                        <div id="withdrawalMoneyEmptyNotice" class="text-center py-4 text-secondary small d-none">
+                            Awaiting registered banks...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Column 3: Transfers (Scenarios, Graph, and Transactions Feed) -->
+            <div class="col-lg-4">
+                <!-- Phase 3: Transfers Scenario Card -->
+                <div class="card bg-black bg-opacity-25 border-primary mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                        <div>
+                            <span class="fw-bold text-primary">3. Transfers</span>
+                            <div class="small text-secondary" style="font-size: 0.75rem;" id="phaseSubtitleTransfers">Automated evaluation</div>
+                        </div>
+                        <span id="phaseTimerTransfers" class="badge bg-dark border border-primary font-monospace text-primary">00:00</span>
+                    </div>
+                    <div class="card-body d-flex flex-column p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <button id="btnPhaseTransfers" class="btn btn-sm btn-success fw-bold px-3" onclick="togglePhase('TRANSFERS')">▶ Play</button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="runDepositScenario('transfer')">⚡ Run Now</button>
+                        </div>
+                        <div class="small text-secondary mb-2" id="phaseDescTransfers">
+                            • Scenario 1 (Hidden)<br>
+                            • Scenario 2 (Hidden)
+                        </div>
+                        <div id="phaseResultsTransfers" class="mt-auto border-top border-secondary pt-2 small text-secondary">
+                            <em>Awaiting first evaluation...</em>
                         </div>
                     </div>
                 </div>
 
                 <!-- Inter-Bank Transfer Network Graph (Nodes & Edges) -->
-                <div class="card mb-4 border-primary">
-                    <div class="card-header bg-dark bg-gradient d-flex justify-content-between align-items-center">
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="fs-5 fw-bold text-white">🌐 Inter-Bank Transfer Network Graph</span>
-                            <span class="badge bg-secondary" id="graphNodesBadge">0 nodes</span>
-                            <span class="badge bg-info text-dark" id="graphEdgesBadge">0 edges</span>
+                <div class="card border-primary mb-3">
+                    <div class="card-header bg-dark bg-gradient d-flex justify-content-between align-items-center py-2">
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="small fw-bold text-white">🌐 Transfer Network Graph</span>
+                            <span class="badge bg-secondary" style="font-size: 0.7rem;" id="graphNodesBadge">0 nodes</span>
                         </div>
-                        <div class="d-flex gap-2 align-items-center">
-                            <span class="small text-secondary me-2" id="graphVolumeSummary">Settled: € 0.00</span>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="resetGraphLayout()" title="Rearrange nodes in a circular layout">🔄 Reset Layout</button>
+                        <div class="d-flex gap-1 align-items-center">
+                            <button class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size: 0.75rem;" onclick="resetGraphLayout()" title="Rearrange nodes in a circular layout">🔄 Reset</button>
                         </div>
                     </div>
-                    <div class="card-body p-2">
-                        <div class="graph-container" id="graphContainer">
-                            <svg id="networkGraphSvg" class="graph-svg" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet">
+                    <div class="card-body p-1">
+                        <div class="graph-container" id="graphContainer" style="height: 250px;">
+                            <svg id="networkGraphSvg" class="graph-svg" viewBox="0 0 600 340" preserveAspectRatio="xMidYMid meet">
                                 <defs>
                                     <marker id="arrow-head" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                                         <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#58a6ff" />
@@ -249,78 +304,26 @@ object ScoreboardHtml {
                                 <g id="graphNodesLayer"></g>
                             </svg>
                             <div id="graphEmptyNotice" class="position-absolute top-50 start-50 translate-middle text-center text-secondary small d-none">
-                                <div class="fs-4 mb-2">🕸️</div>
-                                <div>Awaiting registered banks &amp; inter-bank transactions...</div>
+                                <div class="fs-4 mb-1">🕸️</div>
+                                <div style="font-size: 0.75rem;">Awaiting registered banks &amp; transfers...</div>
                             </div>
                             <div id="graphTooltip" class="position-absolute p-2 bg-black bg-opacity-75 border border-secondary rounded shadow small text-light d-none" style="pointer-events: none; z-index: 100; font-size: 0.75rem;"></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Total Money History (Line Chart) -->
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>📈 Bank Money Timeline (Relative Scale)</span>
-                        <span class="badge bg-secondary" id="lineChartPointsBadge">Live History</span>
-                    </div>
-                    <div class="card-body">
-                        <div id="lineChartContainer" style="position: relative; height: 260px;">
-                            <canvas id="moneyLineChart"></canvas>
-                        </div>
-                        <div id="lineChartEmptyNotice" class="text-center py-4 text-secondary small d-none">
-                            Awaiting registered banks to plot timeline...
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right Column: Registration, Pie Chart & Live Feed -->
-            <div class="col-lg-5">
-                <!-- Participant Registration & QR Code -->
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>📱 Register Your Bank</span>
-                        <a href="/register" target="_blank" class="badge bg-primary text-decoration-none px-2 py-1">Open Page ↗</a>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-flex align-items-center gap-3">
-                            <div id="qrcode" class="p-2 bg-white rounded shadow-sm d-flex align-items-center justify-content-center" style="min-width: 100px; min-height: 100px;"></div>
-                            <div>
-                                <div class="fw-bold text-white mb-1">Scan to Register Bank</div>
-                                <p class="text-secondary small mb-2">Scan with your phone to register your bank and get your generated 8-character BIC code.</p>
-                                <div><a id="regUrlLink" href="/register" target="_blank" class="text-info font-monospace small text-break"></a></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Total Money per Bank (Pie Chart) -->
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>💰 Total Money per Bank</span>
-                        <span class="badge bg-info text-dark" id="chartTotalBadge">€ 0.00</span>
-                    </div>
-                    <div class="card-body">
-                        <div id="chartContainer" style="position: relative; height: 260px;">
-                            <canvas id="moneyPieChart"></canvas>
-                        </div>
-                        <div id="chartEmptyNotice" class="text-center py-4 text-secondary small d-none">
-                            Awaiting settled transactions...
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>📋 Live Settlement Feed</span>
-                        <span class="small text-secondary">Recent 15</span>
+                <!-- Live Settlement Feed / Transactions Table -->
+                <div class="card border-secondary">
+                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                        <span class="small fw-bold text-light">📋 Live Settlement Feed</span>
+                        <span class="badge bg-secondary" id="graphVolumeSummary" style="font-size: 0.7rem;">Transferred: € 0.00</span>
                     </div>
                     <div class="card-body p-0">
-                        <div class="table-responsive" style="max-height: 520px; overflow-y: auto;">
+                        <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
                             <table class="table table-sm table-striped mb-0 small">
                                 <thead>
                                     <tr>
-                                        <th class="ps-3">Tx ID</th>
+                                        <th class="ps-2">Tx ID</th>
                                         <th>Route</th>
                                         <th>Amount</th>
                                         <th>Status</th>
@@ -330,6 +333,26 @@ object ScoreboardHtml {
                                     <tr><td colspan="4" class="text-center py-4 text-secondary">Awaiting transactions...</td></tr>
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Row: 1 Graph Showing the Evolution of Points (Not Money) -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-warning">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-warning">🏆 Participant Points Evolution (Score Timeline)</span>
+                        <span class="badge bg-warning text-dark font-monospace" id="pointsChartBadge">Points Live History</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="pointsChartContainer" style="position: relative; height: 260px;">
+                            <canvas id="pointsLineChart"></canvas>
+                        </div>
+                        <div id="pointsChartEmptyNotice" class="text-center py-4 text-secondary small d-none">
+                            Awaiting registered banks to plot points evolution...
                         </div>
                     </div>
                 </div>
@@ -354,7 +377,6 @@ object ScoreboardHtml {
             '#db61a2', '#7ee787', '#1f6feb', '#238636', '#8957e5'
         ];
 
-        let moneyChart = null;
         let lastGraphData = null;
         let graphPositions = {};
         let activeDraggedNode = null;
@@ -373,8 +395,8 @@ object ScoreboardHtml {
             const positions = {};
             const cx = width / 2;
             const cy = height / 2;
-            const radiusX = Math.min(width * 0.38, 300);
-            const radiusY = Math.min(height * 0.36, 150);
+            const radiusX = Math.min(width * 0.36, 180);
+            const radiusY = Math.min(height * 0.34, 100);
 
             if (count === 1) {
                 positions[nodes[0].bic] = { x: cx, y: cy };
@@ -397,7 +419,6 @@ object ScoreboardHtml {
             const nodesLayer = document.getElementById('graphNodesLayer');
             const emptyNotice = document.getElementById('graphEmptyNotice');
             const nodesBadge = document.getElementById('graphNodesBadge');
-            const edgesBadge = document.getElementById('graphEdgesBadge');
             const volumeSummary = document.getElementById('graphVolumeSummary');
 
             if (!svg || !edgesLayer || !nodesLayer) return;
@@ -406,7 +427,6 @@ object ScoreboardHtml {
             const currentEdges = (graph && graph.edges) ? graph.edges : [];
 
             if (nodesBadge) nodesBadge.innerText = currentNodes.length + ' node' + (currentNodes.length === 1 ? '' : 's');
-            if (edgesBadge) edgesBadge.innerText = currentEdges.length + ' edge' + (currentEdges.length === 1 ? '' : 's');
 
             const totalEdgeCents = currentEdges.reduce((sum, e) => sum + (e.totalAmountCents || 0), 0);
             if (volumeSummary) volumeSummary.innerText = 'Transferred: ' + formatCents(totalEdgeCents);
@@ -420,8 +440,8 @@ object ScoreboardHtml {
 
             if (emptyNotice) emptyNotice.classList.add('d-none');
 
-            const width = 800;
-            const height = 420;
+            const width = 600;
+            const height = 340;
 
             const defaultPos = calculateDefaultNodePositions(currentNodes, width, height);
             currentNodes.forEach(node => {
@@ -440,8 +460,8 @@ object ScoreboardHtml {
             // 1. Render Edges
             let edgesHtml = '';
             currentEdges.forEach((edge, idx) => {
-                const srcPos = graphPositions[edge.sourceBic] || defaultPos[edge.sourceBic] || { x: 200, y: 200 };
-                const dstPos = graphPositions[edge.targetBic] || defaultPos[edge.targetBic] || { x: 600, y: 200 };
+                const srcPos = graphPositions[edge.sourceBic] || defaultPos[edge.sourceBic] || { x: 150, y: 170 };
+                const dstPos = graphPositions[edge.targetBic] || defaultPos[edge.targetBic] || { x: 450, y: 170 };
 
                 const isSelf = edge.sourceBic === edge.targetBic;
                 let pathD = '';
@@ -450,10 +470,10 @@ object ScoreboardHtml {
 
                 if (isSelf) {
                     const sx = srcPos.x;
-                    const sy = srcPos.y - 28;
-                    pathD = `M ${'$'}{sx - 15} ${'$'}{sy} C ${'$'}{sx - 45} ${'$'}{sy - 55}, ${'$'}{sx + 45} ${'$'}{sy - 55}, ${'$'}{sx + 15} ${'$'}{sy}`;
+                    const sy = srcPos.y - 24;
+                    pathD = `M ${'$'}{sx - 12} ${'$'}{sy} C ${'$'}{sx - 38} ${'$'}{sy - 46}, ${'$'}{sx + 38} ${'$'}{sy - 46}, ${'$'}{sx + 12} ${'$'}{sy}`;
                     labelX = sx;
-                    labelY = sy - 44;
+                    labelY = sy - 36;
                 } else {
                     const dx = dstPos.x - srcPos.x;
                     const dy = dstPos.y - srcPos.y;
@@ -461,7 +481,7 @@ object ScoreboardHtml {
                     const nx = -dy / dist;
                     const ny = dx / dist;
 
-                    const offset = 28;
+                    const offset = 22;
                     const cx = (srcPos.x + dstPos.x) / 2 + nx * offset;
                     const cy = (srcPos.y + dstPos.y) / 2 + ny * offset;
 
@@ -471,15 +491,15 @@ object ScoreboardHtml {
                 }
 
                 const strokeColor = palette[idx % palette.length];
-                const strokeWidth = Math.min(6, Math.max(2, Math.log10(Math.max(100, (edge.totalAmountCents || 0) / 100))));
+                const strokeWidth = Math.min(5, Math.max(1.5, Math.log10(Math.max(100, (edge.totalAmountCents || 0) / 100))));
                 const amountFormatted = formatCents(edge.totalAmountCents || 0);
 
                 edgesHtml += `
                     <g class="graph-edge-group" data-edge-src="${'$'}{escapeHtml(edge.sourceBic)}" data-edge-dst="${'$'}{escapeHtml(edge.targetBic)}" data-edge-amount="${'$'}{escapeHtml(amountFormatted)}" data-edge-count="${'$'}{edge.transactionCount}" data-edge-success="${'$'}{edge.successfulCount}">
                         <path d="${'$'}{pathD}" class="graph-edge" stroke="${'$'}{strokeColor}" stroke-width="${'$'}{strokeWidth}" marker-end="url(#arrow-head)" opacity="0.85" />
                         <g transform="translate(${'$'}{labelX}, ${'$'}{labelY})">
-                            <rect x="-42" y="-14" width="84" height="25" class="edge-label-bg" />
-                            <text y="-2" class="edge-label-text">${'$'}{escapeHtml(amountFormatted)}</text>
+                            <rect x="-38" y="-12" width="76" height="22" class="edge-label-bg" />
+                            <text y="-1" class="edge-label-text">${'$'}{escapeHtml(amountFormatted)}</text>
                             <text y="7" class="edge-label-subtext">${'$'}{edge.transactionCount} tx</text>
                         </g>
                     </g>
@@ -494,16 +514,18 @@ object ScoreboardHtml {
                 const color = palette[idx % palette.length];
                 const statusColor = node.status === 'HEALTHY' ? '#238636' : (node.status === 'DEGRADED' ? '#d29922' : '#da3633');
                 const moneyFormatted = formatCents(node.totalMoneyCents || 0);
+                const latencyFormatted = node.pingLatencyMs ? (node.pingLatencyMs + 'ms') : '';
+                const msgFormatted = node.statusMessage || '';
 
                 nodesHtml += `
-                    <g class="graph-node" data-node-bic="${'$'}{escapeHtml(node.bic)}" data-node-name="${'$'}{escapeHtml(node.name)}" data-node-status="${'$'}{escapeHtml(node.status)}" data-node-money="${'$'}{escapeHtml(moneyFormatted)}" data-node-score="${'$'}{node.score || 0}" transform="translate(${'$'}{pos.x}, ${'$'}{pos.y})">
-                        <circle r="30" fill="#161b22" stroke="${'$'}{statusColor}" stroke-width="3" filter="url(#node-glow)" />
-                        <circle r="26" fill="#1f242c" stroke="${'$'}{color}" stroke-width="1.5" />
-                        <text y="-38" fill="#c9d1d9" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" font-weight="600" text-anchor="middle">${'$'}{escapeHtml(node.name)}</text>
-                        <text y="4" fill="#ffffff" font-family="monospace" font-size="11" font-weight="700" text-anchor="middle">${'$'}{escapeHtml(node.bic)}</text>
-                        <g transform="translate(0, 42)">
-                            <rect x="-38" y="-10" width="76" height="18" fill="#161b22" stroke="#30363d" rx="4" />
-                            <text y="2" fill="#58a6ff" font-family="monospace" font-size="9.5" font-weight="600" text-anchor="middle">${'$'}{escapeHtml(moneyFormatted)}</text>
+                    <g class="graph-node" data-node-bic="${'$'}{escapeHtml(node.bic)}" data-node-name="${'$'}{escapeHtml(node.name)}" data-node-status="${'$'}{escapeHtml(node.status)}" data-node-money="${'$'}{escapeHtml(moneyFormatted)}" data-node-score="${'$'}{node.score || 0}" data-node-latency="${'$'}{escapeHtml(latencyFormatted)}" data-node-msg="${'$'}{escapeHtml(msgFormatted)}" transform="translate(${'$'}{pos.x}, ${'$'}{pos.y})">
+                        <circle r="24" fill="#161b22" stroke="${'$'}{statusColor}" stroke-width="2.5" filter="url(#node-glow)" />
+                        <circle r="20" fill="#1f242c" stroke="${'$'}{color}" stroke-width="1.5" />
+                        <text y="-30" fill="#c9d1d9" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="10" font-weight="600" text-anchor="middle">${'$'}{escapeHtml(node.name)}</text>
+                        <text y="4" fill="#ffffff" font-family="monospace" font-size="10" font-weight="700" text-anchor="middle">${'$'}{escapeHtml(node.bic)}</text>
+                        <g transform="translate(0, 34)">
+                            <rect x="-34" y="-8" width="68" height="16" fill="#161b22" stroke="#30363d" rx="3" />
+                            <text y="3" fill="#58a6ff" font-family="monospace" font-size="8.5" font-weight="600" text-anchor="middle">${'$'}{escapeHtml(moneyFormatted)}</text>
                         </g>
                     </g>
                 `;
@@ -527,13 +549,18 @@ object ScoreboardHtml {
                 const status = nodeEl.getAttribute('data-node-status');
                 const money = nodeEl.getAttribute('data-node-money');
                 const score = nodeEl.getAttribute('data-node-score');
+                const latency = nodeEl.getAttribute('data-node-latency');
+                const msg = nodeEl.getAttribute('data-node-msg');
 
                 nodeEl.onmousedown = (e) => startDrag(e, bic);
                 nodeEl.ontouchstart = (e) => startDrag(e, bic);
 
                 nodeEl.onmouseenter = (e) => {
                     if (tooltip) {
-                        tooltip.innerHTML = `<strong>${'$'}{escapeHtml(name)}</strong> (<code>${'$'}{escapeHtml(bic)}</code>)<br>Network health: <span class="badge ${'$'}{status === 'HEALTHY' ? 'bg-success' : (status === 'DEGRADED' ? 'bg-warning text-dark' : 'bg-danger')}">${'$'}{escapeHtml(status)}</span><br>Balance: <span class="text-info font-monospace">${'$'}{escapeHtml(money)}</span><br>Score: <span class="text-primary font-monospace">${'$'}{escapeHtml(score)} pts</span>`;
+                        const latencyHtml = latency ? (' (' + escapeHtml(latency) + ')') : '';
+                        const msgHtml = msg ? ('<br><small class="text-secondary">' + escapeHtml(msg) + '</small>') : '';
+                        const badgeClass = status === 'HEALTHY' ? 'bg-success' : (status === 'DEGRADED' ? 'bg-warning text-dark' : 'bg-danger');
+                        tooltip.innerHTML = '<strong>' + escapeHtml(name) + '</strong> (<code>' + escapeHtml(bic) + '</code>)<br>Network health: <span class="badge ' + badgeClass + '">' + escapeHtml(status) + latencyHtml + '</span>' + msgHtml + '<br>Balance: <span class="text-info font-monospace">' + escapeHtml(money) + '</span><br>Score: <span class="text-primary font-monospace">' + escapeHtml(score) + ' pts</span>';
                         tooltip.classList.remove('d-none');
                         updateTooltipPos(e);
                     }
@@ -587,14 +614,14 @@ object ScoreboardHtml {
             activeDraggedNode = bic;
             const svg = document.getElementById('networkGraphSvg');
             const pt = getSvgCoordinates(e, svg);
-            const currentPos = graphPositions[bic] || { x: 400, y: 200 };
+            const currentPos = graphPositions[bic] || { x: 300, y: 170 };
             dragOffset = { x: pt.x - currentPos.x, y: pt.y - currentPos.y };
 
             const onMove = (moveEvt) => {
                 if (!activeDraggedNode) return;
                 const movePt = getSvgCoordinates(moveEvt, svg);
-                const newX = Math.max(35, Math.min(765, movePt.x - dragOffset.x));
-                const newY = Math.max(45, Math.min(375, movePt.y - dragOffset.y));
+                const newX = Math.max(30, Math.min(570, movePt.x - dragOffset.x));
+                const newY = Math.max(30, Math.min(310, movePt.y - dragOffset.y));
                 graphPositions[activeDraggedNode] = { x: newX, y: newY };
                 if (lastGraphData) {
                     renderTransferGraph(lastGraphData.graph, lastGraphData.banks);
@@ -628,107 +655,58 @@ object ScoreboardHtml {
             return { x: clientX, y: clientY };
         }
 
-        function updateMoneyChart(banks) {
-            const canvas = document.getElementById('moneyPieChart');
-            const emptyNotice = document.getElementById('chartEmptyNotice');
-            const totalBadge = document.getElementById('chartTotalBadge');
-            if (!canvas) return;
-
-            const registeredBanks = banks || [];
-            const totalCents = registeredBanks.reduce((acc, b) => acc + (b.totalMoneyCents || 0), 0);
-            if (totalBadge) {
-                totalBadge.innerText = formatCents(totalCents);
-            }
-
-            const banksWithMoney = registeredBanks.filter(b => (b.totalMoneyCents || 0) > 0);
-
-            if (banksWithMoney.length === 0) {
-                if (emptyNotice) emptyNotice.classList.remove('d-none');
-                if (canvas) canvas.style.display = 'none';
-                if (moneyChart) {
-                    moneyChart.destroy();
-                    moneyChart = null;
-                }
-                return;
-            }
-
-            if (emptyNotice) emptyNotice.classList.add('d-none');
-            if (canvas) canvas.style.display = 'block';
-
-            const labels = banksWithMoney.map(b => b.name + ' (' + b.bic + ')');
-            const dataValues = banksWithMoney.map(b => (b.totalMoneyCents / 100));
-            const bgColors = labels.map((_, i) => palette[i % palette.length]);
-
-            if (!moneyChart) {
-                const ctx = canvas.getContext('2d');
-                moneyChart = new Chart(ctx, {
-                    type: 'pie',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            data: dataValues,
-                            backgroundColor: bgColors,
-                            borderColor: '#161b22',
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'bottom',
-                                labels: {
-                                    color: '#c9d1d9',
-                                    boxWidth: 12,
-                                    padding: 8,
-                                    font: { size: 11 }
-                                }
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        const val = context.raw || 0;
-                                        const sum = dataValues.reduce((a, b) => a + b, 0);
-                                        const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : 0;
-                                        return ' ' + context.label + ': € ' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + pct + '%)';
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-            } else {
-                moneyChart.data.labels = labels;
-                moneyChart.data.datasets[0].data = dataValues;
-                moneyChart.data.datasets[0].backgroundColor = bgColors;
-                moneyChart.update();
-            }
-        }
-
-        let moneyLineChart = null;
+        let depositMoneyChart = null;
+        let withdrawalMoneyChart = null;
+        let pointsChart = null;
         const lineTimeLabels = [];
-        const bankHistory = {};
+        const bankMoneyHistory = {};
+        const bankPointsHistory = {};
         const MAX_HISTORY_POINTS = 60;
 
-        function updateMoneyLineChart(banks) {
-            const canvas = document.getElementById('moneyLineChart');
-            const emptyNotice = document.getElementById('lineChartEmptyNotice');
-            if (!canvas) return;
-
+        function updateCharts(banks) {
             const registeredBanks = banks || [];
+            const totalCents = registeredBanks.reduce((acc, b) => acc + (b.totalMoneyCents || 0), 0);
+
+            const depBadge = document.getElementById('depositsMoneyTotalBadge');
+            if (depBadge) depBadge.innerText = formatCents(totalCents);
+            const withBadge = document.getElementById('withdrawalsMoneyTotalBadge');
+            if (withBadge) withBadge.innerText = formatCents(totalCents);
+
             if (registeredBanks.length === 0) {
-                if (emptyNotice) emptyNotice.classList.remove('d-none');
-                if (canvas) canvas.style.display = 'none';
-                if (moneyLineChart) {
-                    moneyLineChart.destroy();
-                    moneyLineChart = null;
-                }
+                const depNotice = document.getElementById('depositMoneyEmptyNotice');
+                const depCanvas = document.getElementById('depositMoneyLineChart');
+                if (depNotice) depNotice.classList.remove('d-none');
+                if (depCanvas) depCanvas.style.display = 'none';
+                if (depositMoneyChart) { depositMoneyChart.destroy(); depositMoneyChart = null; }
+
+                const withNotice = document.getElementById('withdrawalMoneyEmptyNotice');
+                const withCanvas = document.getElementById('withdrawalMoneyLineChart');
+                if (withNotice) withNotice.classList.remove('d-none');
+                if (withCanvas) withCanvas.style.display = 'none';
+                if (withdrawalMoneyChart) { withdrawalMoneyChart.destroy(); withdrawalMoneyChart = null; }
+
+                const ptsNotice = document.getElementById('pointsChartEmptyNotice');
+                const ptsCanvas = document.getElementById('pointsLineChart');
+                if (ptsNotice) ptsNotice.classList.remove('d-none');
+                if (ptsCanvas) ptsCanvas.style.display = 'none';
+                if (pointsChart) { pointsChart.destroy(); pointsChart = null; }
                 return;
             }
 
-            if (emptyNotice) emptyNotice.classList.add('d-none');
-            if (canvas) canvas.style.display = 'block';
+            const depNotice = document.getElementById('depositMoneyEmptyNotice');
+            const depCanvas = document.getElementById('depositMoneyLineChart');
+            if (depNotice) depNotice.classList.add('d-none');
+            if (depCanvas) depCanvas.style.display = 'block';
+
+            const withNotice = document.getElementById('withdrawalMoneyEmptyNotice');
+            const withCanvas = document.getElementById('withdrawalMoneyLineChart');
+            if (withNotice) withNotice.classList.add('d-none');
+            if (withCanvas) withCanvas.style.display = 'block';
+
+            const ptsNotice = document.getElementById('pointsChartEmptyNotice');
+            const ptsCanvas = document.getElementById('pointsLineChart');
+            if (ptsNotice) ptsNotice.classList.add('d-none');
+            if (ptsCanvas) ptsCanvas.style.display = 'block';
 
             const nowLabel = new Date().toLocaleTimeString();
             lineTimeLabels.push(nowLabel);
@@ -737,36 +715,63 @@ object ScoreboardHtml {
             }
 
             registeredBanks.forEach((b, idx) => {
-                const val = (b.totalMoneyCents || 0) / 100;
-                if (!bankHistory[b.bic]) {
-                    const initial = Array(Math.max(0, lineTimeLabels.length - 1)).fill(0);
-                    bankHistory[b.bic] = {
+                const moneyVal = (b.totalMoneyCents || 0) / 100;
+                const scoreVal = b.score || 0;
+                const color = palette[idx % palette.length];
+
+                if (!bankMoneyHistory[b.bic]) {
+                    bankMoneyHistory[b.bic] = {
                         name: b.name,
                         bic: b.bic,
-                        color: palette[idx % palette.length],
-                        data: initial
+                        color: color,
+                        data: Array(Math.max(0, lineTimeLabels.length - 1)).fill(0)
                     };
                 }
-                bankHistory[b.bic].name = b.name;
-                bankHistory[b.bic].data.push(val);
-                if (bankHistory[b.bic].data.length > MAX_HISTORY_POINTS) {
-                    bankHistory[b.bic].data.shift();
+                bankMoneyHistory[b.bic].name = b.name;
+                bankMoneyHistory[b.bic].color = color;
+                bankMoneyHistory[b.bic].data.push(moneyVal);
+                if (bankMoneyHistory[b.bic].data.length > MAX_HISTORY_POINTS) {
+                    bankMoneyHistory[b.bic].data.shift();
+                }
+
+                if (!bankPointsHistory[b.bic]) {
+                    bankPointsHistory[b.bic] = {
+                        name: b.name,
+                        bic: b.bic,
+                        color: color,
+                        data: Array(Math.max(0, lineTimeLabels.length - 1)).fill(0)
+                    };
+                }
+                bankPointsHistory[b.bic].name = b.name;
+                bankPointsHistory[b.bic].color = color;
+                bankPointsHistory[b.bic].data.push(scoreVal);
+                if (bankPointsHistory[b.bic].data.length > MAX_HISTORY_POINTS) {
+                    bankPointsHistory[b.bic].data.shift();
                 }
             });
 
-            Object.keys(bankHistory).forEach(bic => {
-                const isCurrentlyRegistered = registeredBanks.some(b => b.bic === bic);
-                if (!isCurrentlyRegistered) {
-                    const lastVal = bankHistory[bic].data.length > 0 ? bankHistory[bic].data[bankHistory[bic].data.length - 1] : 0;
-                    bankHistory[bic].data.push(lastVal);
-                    if (bankHistory[bic].data.length > MAX_HISTORY_POINTS) {
-                        bankHistory[bic].data.shift();
+            Object.keys(bankMoneyHistory).forEach(bic => {
+                if (!registeredBanks.some(b => b.bic === bic)) {
+                    const lastVal = bankMoneyHistory[bic].data.length > 0 ? bankMoneyHistory[bic].data[bankMoneyHistory[bic].data.length - 1] : 0;
+                    bankMoneyHistory[bic].data.push(lastVal);
+                    if (bankMoneyHistory[bic].data.length > MAX_HISTORY_POINTS) {
+                        bankMoneyHistory[bic].data.shift();
                     }
                 }
             });
 
-            const datasets = Object.keys(bankHistory).map(bic => {
-                const item = bankHistory[bic];
+            Object.keys(bankPointsHistory).forEach(bic => {
+                if (!registeredBanks.some(b => b.bic === bic)) {
+                    const lastVal = bankPointsHistory[bic].data.length > 0 ? bankPointsHistory[bic].data[bankPointsHistory[bic].data.length - 1] : 0;
+                    bankPointsHistory[bic].data.push(lastVal);
+                    if (bankPointsHistory[bic].data.length > MAX_HISTORY_POINTS) {
+                        bankPointsHistory[bic].data.shift();
+                    }
+                }
+            });
+
+            const moneyDatasets = Object.keys(bankMoneyHistory).map(bic => {
+                const item = bankMoneyHistory[bic];
                 return {
                     label: item.name + ' (' + item.bic + ')',
                     data: [...item.data],
@@ -780,68 +785,130 @@ object ScoreboardHtml {
                 };
             });
 
-            if (!moneyLineChart) {
-                const ctx = canvas.getContext('2d');
-                moneyLineChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: [...lineTimeLabels],
-                        datasets: datasets
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        animation: false,
-                        interaction: {
-                            mode: 'index',
-                            intersect: false
+            const pointsDatasets = Object.keys(bankPointsHistory).map(bic => {
+                const item = bankPointsHistory[bic];
+                return {
+                    label: item.name + ' (' + item.bic + ')',
+                    data: [...item.data],
+                    borderColor: item.color,
+                    backgroundColor: item.color,
+                    borderWidth: 2.5,
+                    tension: 0.25,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    fill: false
+                };
+            });
+
+            function createOrUpdateMoneyChart(canvasId, existingChart) {
+                const canvas = document.getElementById(canvasId);
+                if (!canvas) return null;
+                if (!existingChart) {
+                    const ctx = canvas.getContext('2d');
+                    return new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: [...lineTimeLabels],
+                            datasets: moneyDatasets
                         },
-                        scales: {
-                            x: {
-                                grid: { color: '#21262d' },
-                                ticks: {
-                                    color: '#8b949e',
-                                    maxTicksLimit: 8,
-                                    font: { size: 10 }
-                                }
-                            },
-                            y: {
-                                beginAtZero: true,
-                                grid: { color: '#21262d' },
-                                ticks: {
-                                    color: '#8b949e',
-                                    font: { size: 10 },
-                                    callback: function(value) {
-                                        return '€ ' + value.toLocaleString('en-US');
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: false,
+                            interaction: { mode: 'index', intersect: false },
+                            scales: {
+                                x: {
+                                    grid: { color: '#21262d' },
+                                    ticks: { color: '#8b949e', maxTicksLimit: 6, font: { size: 9 } }
+                                },
+                                y: {
+                                    beginAtZero: true,
+                                    grid: { color: '#21262d' },
+                                    ticks: {
+                                        color: '#8b949e',
+                                        font: { size: 9 },
+                                        callback: function(v) { return '€ ' + v.toLocaleString('en-US'); }
                                     }
                                 }
-                            }
-                        },
-                        plugins: {
-                            legend: {
-                                position: 'top',
-                                labels: {
-                                    color: '#c9d1d9',
-                                    boxWidth: 12,
-                                    padding: 8,
-                                    font: { size: 11 }
-                                }
                             },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        const val = context.raw || 0;
-                                        return ' ' + context.dataset.label + ': € ' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                    labels: { color: '#c9d1d9', boxWidth: 10, padding: 6, font: { size: 10 } }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(ctx) {
+                                            const v = ctx.raw || 0;
+                                            return ' ' + ctx.dataset.label + ': € ' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                });
-            } else {
-                moneyLineChart.data.labels = [...lineTimeLabels];
-                moneyLineChart.data.datasets = datasets;
-                moneyLineChart.update('none');
+                    });
+                } else {
+                    existingChart.data.labels = [...lineTimeLabels];
+                    existingChart.data.datasets = moneyDatasets;
+                    existingChart.update('none');
+                    return existingChart;
+                }
+            }
+
+            depositMoneyChart = createOrUpdateMoneyChart('depositMoneyLineChart', depositMoneyChart);
+            withdrawalMoneyChart = createOrUpdateMoneyChart('withdrawalMoneyLineChart', withdrawalMoneyChart);
+
+            const pointsCanvas = document.getElementById('pointsLineChart');
+            if (pointsCanvas) {
+                if (!pointsChart) {
+                    const ctx = pointsCanvas.getContext('2d');
+                    pointsChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: [...lineTimeLabels],
+                            datasets: pointsDatasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: false,
+                            interaction: { mode: 'index', intersect: false },
+                            scales: {
+                                x: {
+                                    grid: { color: '#21262d' },
+                                    ticks: { color: '#8b949e', maxTicksLimit: 10, font: { size: 10 } }
+                                },
+                                y: {
+                                    beginAtZero: true,
+                                    grid: { color: '#21262d' },
+                                    ticks: {
+                                        color: '#8b949e',
+                                        font: { size: 10 },
+                                        callback: function(v) { return v + ' pts'; }
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                    labels: { color: '#c9d1d9', boxWidth: 12, padding: 8, font: { size: 11 } }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(ctx) {
+                                            const v = ctx.raw || 0;
+                                            return ' ' + ctx.dataset.label + ': ' + v + ' pts';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    pointsChart.data.labels = [...lineTimeLabels];
+                    pointsChart.data.datasets = pointsDatasets;
+                    pointsChart.update('none');
+                }
             }
         }
 
@@ -874,8 +941,7 @@ object ScoreboardHtml {
 
             lastBanks = data.banks || [];
             lastGraphData = data;
-            updateMoneyChart(data.banks);
-            updateMoneyLineChart(data.banks);
+            updateCharts(data.banks);
             renderTransferGraph(data.graph, data.banks);
 
             const tbody = document.getElementById('leaderboardBody');
@@ -891,12 +957,15 @@ object ScoreboardHtml {
                 const rate = total > 0 ? ((success / total) * 100).toFixed(0) + '%' : '100%';
                 
                 let healthBadge = '';
+                const latencyText = b.pingLatencyMs ? (' (' + b.pingLatencyMs + 'ms)') : '';
+                const tooltipText = b.statusMessage ? escapeHtml(b.statusMessage) : (b.status || 'UNKNOWN');
                 if (b.status === 'HEALTHY' || b.status === 'ONLINE' || b.status === 'UP') {
-                    healthBadge = '<span class="badge badge-healthy text-white"><span class="me-1">●</span>Healthy</span>';
+                    healthBadge = '<span class="badge badge-healthy text-white" title="' + tooltipText + '"><span class="me-1">●</span>Healthy' + latencyText + '</span>';
                 } else if (b.status === 'DEGRADED') {
-                    healthBadge = '<span class="badge badge-degraded"><span class="me-1">●</span>Degraded</span>';
+                    healthBadge = '<span class="badge badge-degraded" title="' + tooltipText + '"><span class="me-1">●</span>Degraded</span>';
                 } else {
-                    healthBadge = '<span class="badge badge-down text-white"><span class="me-1">●</span>Disconnected</span>';
+                    const detail = b.statusMessage && (b.statusMessage.startsWith('HTTP ') || b.statusMessage.startsWith('Unreachable')) ? (' (' + escapeHtml(b.statusMessage.replace('Unreachable: ', '')) + ')') : '';
+                    healthBadge = '<span class="badge badge-down text-white" title="' + tooltipText + '"><span class="me-1">●</span>Disconnected' + detail + '</span>';
                 }
 
                 html += `
@@ -916,6 +985,7 @@ object ScoreboardHtml {
                         <td>${'$'}{healthBadge}</td>
                         <td class="text-end pe-3">
                             <div class="d-inline-flex gap-1">
+                                <button class="btn btn-sm btn-outline-info" title="Test connection to bank" onclick="pingSingleBank('${'$'}{escapeHtml(b.bic)}')">⚡ Ping</button>
                                 <button class="btn btn-sm btn-outline-info" title="Edit bank tunnel URL" onclick="openEditTunnelModal('${'$'}{escapeHtml(b.bic)}')">✏️ Edit URL</button>
                                 <button class="btn btn-sm btn-outline-danger" title="Remove bank" onclick="removeBank('${'$'}{escapeHtml(b.bic)}', this)">🗑 Remove</button>
                             </div>
@@ -938,7 +1008,8 @@ object ScoreboardHtml {
                     console.warn('Failed to remove bank', bic, res.status);
                     return;
                 }
-                delete bankHistory[bic];
+                delete bankMoneyHistory[bic];
+                delete bankPointsHistory[bic];
                 delete graphPositions[bic];
             } catch (err) {
                 btn.disabled = false;
@@ -1284,6 +1355,24 @@ object ScoreboardHtml {
             }
         }
 
+        async function pingSingleBank(bic) {
+            try {
+                await fetch('/swift/banks/' + encodeURIComponent(bic) + '/ping', { method: 'POST' });
+                await pollState();
+            } catch (e) {
+                console.warn('Ping failed for bank', bic, e);
+            }
+        }
+
+        async function pingAllBanks() {
+            try {
+                await fetch('/swift/ping', { method: 'POST' });
+                await pollState();
+            } catch (e) {
+                console.warn('Ping all failed', e);
+            }
+        }
+
         let currentEditBic = null;
         let editTunnelModalInstance = null;
 
@@ -1313,12 +1402,54 @@ object ScoreboardHtml {
             }
         }
 
+        async function testModalConnection() {
+            if (!currentEditBic) return;
+            const input = document.getElementById('modalTunnelUrlInput');
+            const alertBox = document.getElementById('modalEditAlert');
+            const testBtn = document.getElementById('btnTestTunnelUrl');
+            const newUrl = input.value.trim();
+            if (!newUrl) {
+                alertBox.className = 'alert alert-danger py-2 small mb-0';
+                alertBox.innerText = 'Please enter a URL first.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+            if (testBtn) { testBtn.disabled = true; testBtn.innerText = 'Testing...'; }
+            alertBox.className = 'alert alert-info py-2 small mb-0';
+            alertBox.innerText = 'Pinging ' + newUrl + '...';
+            alertBox.classList.remove('d-none');
+
+            try {
+                // First update URL so ping hits the new address
+                const res = await fetch('/swift/banks/' + encodeURIComponent(currentEditBic) + '/url', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ webhookUrl: newUrl })
+                });
+                const data = await res.json();
+                if (data.status === 'HEALTHY') {
+                    alertBox.className = 'alert alert-success py-2 small mb-0';
+                    alertBox.innerText = '✅ Connected successfully! (Latency: ' + (data.pingLatencyMs ? data.pingLatencyMs + 'ms' : 'OK') + ')';
+                } else {
+                    alertBox.className = 'alert alert-danger py-2 small mb-0';
+                    alertBox.innerText = '❌ Failed to connect: ' + (data.statusMessage || data.status);
+                }
+                await pollState();
+            } catch (err) {
+                alertBox.className = 'alert alert-danger py-2 small mb-0';
+                alertBox.innerText = '❌ Error testing connection: ' + err.message;
+            } finally {
+                if (testBtn) { testBtn.disabled = false; testBtn.innerText = '⚡ Test Connection'; }
+            }
+        }
+
         async function saveTunnelUrl() {
             if (!currentEditBic) return;
             const input = document.getElementById('modalTunnelUrlInput');
             const newUrl = input.value.trim();
             const alertBox = document.getElementById('modalEditAlert');
             if (!newUrl) {
+                alertBox.className = 'alert alert-danger py-2 small mb-0';
                 alertBox.innerText = 'Tunnel URL cannot be empty.';
                 alertBox.classList.remove('d-none');
                 return;
@@ -1332,6 +1463,7 @@ object ScoreboardHtml {
                     editTunnelModalInstance.hide();
                 }
             } catch (err) {
+                alertBox.className = 'alert alert-danger py-2 small mb-0';
                 alertBox.innerText = 'Failed to update URL: ' + err.message;
                 alertBox.classList.remove('d-none');
             } finally {
@@ -1377,9 +1509,12 @@ object ScoreboardHtml {
                     </div>
                     <div id="modalEditAlert" class="alert alert-danger d-none py-2 small mb-0"></div>
                 </div>
-                <div class="modal-footer border-secondary">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-sm btn-primary" id="btnSaveTunnelUrl" onclick="saveTunnelUrl()">Save URL</button>
+                <div class="modal-footer border-secondary d-flex justify-content-between">
+                    <button type="button" class="btn btn-sm btn-outline-info" id="btnTestTunnelUrl" onclick="testModalConnection()">⚡ Test Connection</button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-sm btn-primary" id="btnSaveTunnelUrl" onclick="saveTunnelUrl()">Save URL</button>
+                    </div>
                 </div>
             </div>
         </div>

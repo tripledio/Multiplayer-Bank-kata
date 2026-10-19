@@ -119,12 +119,28 @@ class BankRegistryTest {
     @Test
     fun `should update status and retain DOWN on failed transaction until success`() {
         registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Alpha", webhookUrl = "https://alpha.loca.lt"))
-        registry.updateStatus(Bic("BANKAXXX"), "DOWN")
+        registry.updateStatus(Bic("BANKAXXX"), "DOWN", latencyMs = null, statusMessage = "HTTP 503 Service Unavailable")
+
+        val nodeDown = registry.getBank(Bic("BANKAXXX"))
+        assertThat(nodeDown?.status).isEqualTo("DOWN")
+        assertThat(nodeDown?.statusMessage).isEqualTo("HTTP 503 Service Unavailable")
+        assertThat(nodeDown?.pingLatencyMs).isNull()
 
         registry.recordTransaction(Bic("BANKAXXX"), isSuccess = false, pointsAwarded = 0L)
         assertThat(registry.getBank(Bic("BANKAXXX"))?.status).isEqualTo("DOWN")
 
         registry.recordTransaction(Bic("BANKAXXX"), isSuccess = true, pointsAwarded = 10L)
         assertThat(registry.getBank(Bic("BANKAXXX"))?.status).isEqualTo("HEALTHY")
+    }
+
+    @Test
+    fun `should update status with latency and status message`() {
+        registry.register(RegisterBankRequest(bic = "BANKBXXX", name = "Beta", webhookUrl = "https://beta.loca.lt"))
+        registry.updateStatus(Bic("BANKBXXX"), "HEALTHY", latencyMs = 25L, statusMessage = "OK (25ms)")
+
+        val bank = registry.getBank(Bic("BANKBXXX"))
+        assertThat(bank?.status).isEqualTo("HEALTHY")
+        assertThat(bank?.pingLatencyMs).isEqualTo(25L)
+        assertThat(bank?.statusMessage).isEqualTo("OK (25ms)")
     }
 }
