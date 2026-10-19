@@ -53,9 +53,9 @@ Grab your pairing partner, spin up your tunnel, and let's disrupt modern banking
 ### 2. Verify Build & Run Tests
 From the repository root:
 ```bash
-./gradlew test
+./gradlew :bank-starter:test
 ```
-All unit tests in `:bank-starter` should run and pass in ~1-2 seconds.
+*The starter test compiles cleanly and fails with `NotImplementedError` at runtime, ready for you to drive the implementation outside-in!*
 
 ### 3. Expose Your Bank via Tunnel
 In a terminal tab, expose your local port `8080` to the network / internet:
@@ -92,13 +92,13 @@ Watch your bank appear on the live projector scoreboard!
 ## 🎯 Workshop Milestones & TDD Progression
 
 ### Round 1: Core Domain (00:15 - 00:45)
-- Open `bank-starter/src/main/kotlin/org/craftedsw/bank/domain/`.
-- Practice TDD to implement and refine:
+- Open `bank-starter/src/main/kotlin/org/craftedsw/bank/service/BankService.kt` and `bank-starter/src/test/kotlin/org/craftedsw/bank/service/BankServiceTest.kt`.
+- Practice Outside-In TDD to implement and refine:
   - Internal deposits and balance calculations.
   - Withdrawals and overdraw protections.
-  - Account statement printing in reverse chronological order.
-  - Statement filters (e.g., deposits only, withdrawals only, date ranges).
-- Maintain 100% test coverage using JUnit 5 and AssertJ/MockK.
+  - Account statement queries in reverse chronological order with running balance.
+  - Create and shape rich domain abstractions in `org.craftedsw.bank.domain`.
+- Maintain high test coverage using JUnit 5 and AssertJ.
 
 ### Round 2: The SWIFT Network & Webhooks (00:45 - 01:15)
 - Open `bank-starter/src/main/kotlin/org/craftedsw/bank/api/BankRoutes.kt`.
