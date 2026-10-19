@@ -17,7 +17,9 @@ import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
+import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
@@ -33,6 +35,7 @@ import org.craftedsw.contracts.SimulatorStatusResponse
 import org.craftedsw.contracts.TransferRequest
 import org.craftedsw.contracts.TransferResult
 import org.craftedsw.contracts.TransferStatus
+import org.craftedsw.contracts.UpdateBankUrlRequest
 import org.craftedsw.swift.router.AuditLedger
 import org.craftedsw.swift.router.BankRegistry
 import org.craftedsw.swift.router.TransferRouter
@@ -195,6 +198,39 @@ fun Application.swiftHubModule(
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
                 } else {
                     call.respond(HttpStatusCode.OK, removed)
+                }
+            }
+
+            put("/swift/banks/{bic}/url") {
+                val bic = call.parameters["bic"].orEmpty()
+                val request = call.receive<UpdateBankUrlRequest>()
+                val updated = bankRegistry.updateWebhookUrl(Bic(bic), request.webhookUrl)
+                if (updated == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
+                } else {
+                    call.respond(HttpStatusCode.OK, updated)
+                }
+            }
+
+            post("/swift/banks/{bic}/url") {
+                val bic = call.parameters["bic"].orEmpty()
+                val request = call.receive<UpdateBankUrlRequest>()
+                val updated = bankRegistry.updateWebhookUrl(Bic(bic), request.webhookUrl)
+                if (updated == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
+                } else {
+                    call.respond(HttpStatusCode.OK, updated)
+                }
+            }
+
+            patch("/swift/banks/{bic}") {
+                val bic = call.parameters["bic"].orEmpty()
+                val request = call.receive<UpdateBankUrlRequest>()
+                val updated = bankRegistry.updateWebhookUrl(Bic(bic), request.webhookUrl)
+                if (updated == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Bank '$bic' is not registered"))
+                } else {
+                    call.respond(HttpStatusCode.OK, updated)
                 }
             }
 

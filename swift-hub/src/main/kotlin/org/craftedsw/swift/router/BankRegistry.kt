@@ -69,6 +69,17 @@ class BankRegistry {
     /** Removes by exact BIC only; the flexible lookup of [getBank] could remove the wrong bank. */
     fun remove(bic: Bic): BankNodeInfo? = registry.remove(bic.value.uppercase().trim())
 
+    fun updateWebhookUrl(bic: Bic, newWebhookUrl: String): BankNodeInfo? {
+        val targetBank = getBank(bic) ?: return null
+        return registry.computeIfPresent(targetBank.bic) { _, current ->
+            current.copy(
+                webhookUrl = newWebhookUrl.trim().trimEnd('/'),
+                status = "HEALTHY",
+                lastSeenTimestamp = System.currentTimeMillis()
+            )
+        }
+    }
+
     fun updateStatus(bic: Bic, status: String) {
         val targetBank = getBank(bic) ?: return
         registry.computeIfPresent(targetBank.bic) { _, current ->
@@ -85,7 +96,7 @@ class BankRegistry {
                 failedTransactions = if (!isSuccess) current.failedTransactions + 1 else current.failedTransactions,
                 score = (current.score + pointsAwarded).coerceAtLeast(0),
                 totalMoneyCents = if (isSuccess) current.totalMoneyCents + amountCents else current.totalMoneyCents,
-                status = if (isSuccess) "HEALTHY" else if (current.failedTransactions > 3) "DEGRADED" else current.status,
+                status = if (isSuccess) "HEALTHY" else if (current.status == "DOWN") "DOWN" else if (current.failedTransactions > 3) "DEGRADED" else current.status,
                 lastSeenTimestamp = System.currentTimeMillis()
             )
         }

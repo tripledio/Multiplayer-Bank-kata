@@ -99,4 +99,32 @@ class BankRegistryTest {
         assertThat(removed?.name).isEqualTo("Alpha")
         assertThat(registry.getAllBanks().map { it.bic }).containsExactly("BANKBXXX")
     }
+
+    @Test
+    fun `should update bank webhook URL and reset status to HEALTHY`() {
+        val node = registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Alpha", webhookUrl = "https://alpha.loca.lt"))
+        registry.updateStatus(Bic("BANKAXXX"), "DOWN")
+        assertThat(registry.getBank(Bic("BANKAXXX"))?.status).isEqualTo("DOWN")
+
+        val updated = registry.updateWebhookUrl(Bic("bankaxxx"), "https://alpha-new.loca.lt/")
+        assertThat(updated).isNotNull
+        assertThat(updated?.webhookUrl).isEqualTo("https://alpha-new.loca.lt")
+        assertThat(updated?.status).isEqualTo("HEALTHY")
+
+        val retrieved = registry.getBank(Bic("BANKAXXX"))
+        assertThat(retrieved?.webhookUrl).isEqualTo("https://alpha-new.loca.lt")
+        assertThat(retrieved?.status).isEqualTo("HEALTHY")
+    }
+
+    @Test
+    fun `should update status and retain DOWN on failed transaction until success`() {
+        registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Alpha", webhookUrl = "https://alpha.loca.lt"))
+        registry.updateStatus(Bic("BANKAXXX"), "DOWN")
+
+        registry.recordTransaction(Bic("BANKAXXX"), isSuccess = false, pointsAwarded = 0L)
+        assertThat(registry.getBank(Bic("BANKAXXX"))?.status).isEqualTo("DOWN")
+
+        registry.recordTransaction(Bic("BANKAXXX"), isSuccess = true, pointsAwarded = 10L)
+        assertThat(registry.getBank(Bic("BANKAXXX"))?.status).isEqualTo("HEALTHY")
+    }
 }

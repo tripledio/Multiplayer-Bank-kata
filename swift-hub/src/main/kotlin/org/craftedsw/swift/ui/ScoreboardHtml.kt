@@ -10,6 +10,7 @@ object ScoreboardHtml {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SWIFT Hub - Multiplayer Bank Kata Scoreboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -97,8 +98,8 @@ object ScoreboardHtml {
                                         <th>Score</th>
                                         <th>Processed</th>
                                         <th>Success Rate</th>
-                                        <th>Status</th>
-                                        <th></th>
+                                        <th>Network health</th>
+                                        <th class="text-end pe-3">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="leaderboardBody">
@@ -129,7 +130,7 @@ object ScoreboardHtml {
                                     <div class="card-header d-flex justify-content-between align-items-center py-2">
                                         <div>
                                             <span class="fw-bold text-info">1. Deposits</span>
-                                            <div class="small text-secondary" style="font-size: 0.75rem;">+50€ &amp; -50€ Rejection</div>
+                                            <div class="small text-secondary" style="font-size: 0.75rem;" id="phaseSubtitleDeposits">Automated evaluation</div>
                                         </div>
                                         <span id="phaseTimerDeposits" class="badge bg-dark border border-info font-monospace text-info">00:00</span>
                                     </div>
@@ -139,8 +140,8 @@ object ScoreboardHtml {
                                             <button class="btn btn-sm btn-outline-info" onclick="runDepositScenario('deposit')">⚡ Run Now</button>
                                         </div>
                                         <div class="small text-secondary mb-2" id="phaseDescDeposits">
-                                            • Deposit 50 EUR (Assert 50€ &amp; statement)<br>
-                                            • Deposit -50 EUR (Assert error &amp; no 0€)
+                                            • Scenario 1 (Hidden)<br>
+                                            • Scenario 2 (Hidden)
                                         </div>
                                         <div id="phaseResultsDeposits" class="mt-auto border-top border-secondary pt-2 small text-secondary">
                                             <em>Awaiting first evaluation...</em>
@@ -155,7 +156,7 @@ object ScoreboardHtml {
                                     <div class="card-header d-flex justify-content-between align-items-center py-2">
                                         <div>
                                             <span class="fw-bold text-warning">2. Withdrawals</span>
-                                            <div class="small text-secondary" style="font-size: 0.75rem;">Happy, Negative, Overdraft</div>
+                                            <div class="small text-secondary" style="font-size: 0.75rem;" id="phaseSubtitleWithdrawals">Automated evaluation</div>
                                         </div>
                                         <span id="phaseTimerWithdrawals" class="badge bg-dark border border-warning font-monospace text-warning">00:00</span>
                                     </div>
@@ -165,9 +166,9 @@ object ScoreboardHtml {
                                             <button class="btn btn-sm btn-outline-warning" onclick="runDepositScenario('withdraw')">⚡ Run Now</button>
                                         </div>
                                         <div class="small text-secondary mb-2" id="phaseDescWithdrawals">
-                                            • Deposit 50€ + Withdraw 20€ (Happy)<br>
-                                            • Withdraw -50 EUR (Assert rejection)<br>
-                                            • Withdraw > balance (Assert rejection)
+                                            • Scenario 1 (Hidden)<br>
+                                            • Scenario 2 (Hidden)<br>
+                                            • Scenario 3 (Hidden)
                                         </div>
                                         <div id="phaseResultsWithdrawals" class="mt-auto border-top border-secondary pt-2 small text-secondary">
                                             <em>Awaiting first evaluation...</em>
@@ -182,7 +183,7 @@ object ScoreboardHtml {
                                     <div class="card-header d-flex justify-content-between align-items-center py-2">
                                         <div>
                                             <span class="fw-bold text-primary">3. Transfers</span>
-                                            <div class="small text-secondary" style="font-size: 0.75rem;">Intra-Bank &amp; Cross-Bank</div>
+                                            <div class="small text-secondary" style="font-size: 0.75rem;" id="phaseSubtitleTransfers">Automated evaluation</div>
                                         </div>
                                         <span id="phaseTimerTransfers" class="badge bg-dark border border-primary font-monospace text-primary">00:00</span>
                                     </div>
@@ -192,8 +193,8 @@ object ScoreboardHtml {
                                             <button class="btn btn-sm btn-outline-primary" onclick="runDepositScenario('transfer')">⚡ Run Now</button>
                                         </div>
                                         <div class="small text-secondary mb-2" id="phaseDescTransfers">
-                                            • Intra-Bank transfer within bank<br>
-                                            • Cross-Bank transfer via SWIFT Hub
+                                            • Scenario 1 (Hidden)<br>
+                                            • Scenario 2 (Hidden)
                                         </div>
                                         <div id="phaseResultsTransfers" class="mt-auto border-top border-secondary pt-2 small text-secondary">
                                             <em>Awaiting first evaluation...</em>
@@ -532,7 +533,7 @@ object ScoreboardHtml {
 
                 nodeEl.onmouseenter = (e) => {
                     if (tooltip) {
-                        tooltip.innerHTML = `<strong>${'$'}{escapeHtml(name)}</strong> (<code>${'$'}{escapeHtml(bic)}</code>)<br>Status: <span class="badge ${'$'}{status === 'HEALTHY' ? 'bg-success' : 'bg-warning text-dark'}">${'$'}{escapeHtml(status)}</span><br>Balance: <span class="text-info font-monospace">${'$'}{escapeHtml(money)}</span><br>Score: <span class="text-primary font-monospace">${'$'}{escapeHtml(score)} pts</span>`;
+                        tooltip.innerHTML = `<strong>${'$'}{escapeHtml(name)}</strong> (<code>${'$'}{escapeHtml(bic)}</code>)<br>Network health: <span class="badge ${'$'}{status === 'HEALTHY' ? 'bg-success' : (status === 'DEGRADED' ? 'bg-warning text-dark' : 'bg-danger')}">${'$'}{escapeHtml(status)}</span><br>Balance: <span class="text-info font-monospace">${'$'}{escapeHtml(money)}</span><br>Score: <span class="text-primary font-monospace">${'$'}{escapeHtml(score)} pts</span>`;
                         tooltip.classList.remove('d-none');
                         updateTooltipPos(e);
                     }
@@ -888,19 +889,37 @@ object ScoreboardHtml {
                 const total = b.totalTransactions || 0;
                 const success = b.successfulTransactions || 0;
                 const rate = total > 0 ? ((success / total) * 100).toFixed(0) + '%' : '100%';
-                const badgeClass = b.status === 'HEALTHY' ? 'badge-healthy' : (b.status === 'DEGRADED' ? 'badge-degraded' : 'badge-down');
+                
+                let healthBadge = '';
+                if (b.status === 'HEALTHY' || b.status === 'ONLINE' || b.status === 'UP') {
+                    healthBadge = '<span class="badge badge-healthy text-white"><span class="me-1">●</span>Healthy</span>';
+                } else if (b.status === 'DEGRADED') {
+                    healthBadge = '<span class="badge badge-degraded"><span class="me-1">●</span>Degraded</span>';
+                } else {
+                    healthBadge = '<span class="badge badge-down text-white"><span class="me-1">●</span>Disconnected</span>';
+                }
 
                 html += `
                     <tr>
                         <td class="ps-3 font-monospace text-secondary">${'$'}{index + 1}</td>
-                        <td><span class="badge bg-dark border border-secondary font-monospace">${'$'}{b.bic}</span></td>
-                        <td class="fw-bold text-white">${'$'}{b.name}</td>
+                        <td><span class="badge bg-dark border border-secondary font-monospace">${'$'}{escapeHtml(b.bic)}</span></td>
+                        <td>
+                            <div class="fw-bold text-white">${'$'}{escapeHtml(b.name)}</div>
+                            <div class="small text-secondary font-monospace" style="font-size: 0.72rem;" title="${'$'}{escapeHtml(b.webhookUrl)}">
+                                🔗 ${'$'}{escapeHtml(b.webhookUrl || 'No URL')}
+                            </div>
+                        </td>
                         <td class="text-info fw-bold font-monospace">${'$'}{formatCents(b.totalMoneyCents || 0)}</td>
                         <td class="text-primary fw-bold font-monospace">${'$'}{b.score} pts</td>
                         <td>${'$'}{b.totalTransactions}</td>
                         <td><span class="text-success">${'$'}{rate}</span></td>
-                        <td><span class="badge ${'$'}{badgeClass}">${'$'}{b.status}</span></td>
-                        <td class="text-end pe-3"><button class="btn btn-sm btn-outline-danger" title="Remove bank" onclick="removeBank('${'$'}{b.bic}', this)">🗑 Remove</button></td>
+                        <td>${'$'}{healthBadge}</td>
+                        <td class="text-end pe-3">
+                            <div class="d-inline-flex gap-1">
+                                <button class="btn btn-sm btn-outline-info" title="Edit bank tunnel URL" onclick="openEditTunnelModal('${'$'}{escapeHtml(b.bic)}')">✏️ Edit URL</button>
+                                <button class="btn btn-sm btn-outline-danger" title="Remove bank" onclick="removeBank('${'$'}{escapeHtml(b.bic)}', this)">🗑 Remove</button>
+                            </div>
+                        </td>
                     </tr>
                 `;
             });
@@ -1018,6 +1037,67 @@ object ScoreboardHtml {
             }
         }
 
+        const PHASE_SCENARIOS = {
+            deposits: [
+                { id: 'DEPOSIT_50_EUR', name: 'Deposit 50 EUR (Assert 50€ & statement)' },
+                { id: 'DEPOSIT_NEGATIVE_50_EUR', name: 'Deposit -50 EUR (Assert error & no 0€)' }
+            ],
+            withdrawals: [
+                { id: 'WITHDRAW_HAPPY_20_EUR', name: 'Deposit 50€ + Withdraw 20€ (Happy)' },
+                { id: 'WITHDRAW_NEGATIVE_50_EUR', name: 'Withdraw -50 EUR (Assert rejection)' },
+                { id: 'WITHDRAW_OVERDRAFT_50_EUR', name: 'Withdraw > balance (Assert rejection)' }
+            ],
+            transfers: [
+                { id: 'TRANSFER_INTRA_BANK', name: 'Intra-Bank transfer within bank' },
+                { id: 'TRANSFER_CROSS_BANK', name: 'Cross-Bank transfer via SWIFT Hub' }
+            ]
+        };
+
+        function isScenarioGreenForAll(scenarioId, results) {
+            if (!results || results.length === 0) return false;
+            const matching = results.filter(r => r.scenario === scenarioId);
+            return matching.length > 0 && matching.every(r => r.passed);
+        }
+
+        function getScenarioDisplayName(scenarioId, results, phaseKey) {
+            if (isScenarioGreenForAll(scenarioId, results)) {
+                return scenarioId;
+            }
+            let index = -1;
+            if (phaseKey && PHASE_SCENARIOS[phaseKey]) {
+                index = PHASE_SCENARIOS[phaseKey].findIndex(s => s.id === scenarioId);
+            }
+            if (index === -1 && results) {
+                const unique = [];
+                results.forEach(r => {
+                    if (!unique.includes(r.scenario)) unique.push(r.scenario);
+                });
+                index = unique.indexOf(scenarioId);
+            }
+            const num = index >= 0 ? (index + 1) : 1;
+            return 'Scenario ' + num;
+        }
+
+        function updatePhaseScenarioDescriptions(phaseKey, results, descElementId, subtitleElementId, fullSubtitle) {
+            const descEl = document.getElementById(descElementId);
+            const scenarios = PHASE_SCENARIOS[phaseKey] || [];
+            if (descEl) {
+                const lines = scenarios.map((s, idx) => {
+                    if (isScenarioGreenForAll(s.id, results)) {
+                        return '• ' + escapeHtml(s.name);
+                    } else {
+                        return '• Scenario ' + (idx + 1) + ' (Hidden)';
+                    }
+                });
+                descEl.innerHTML = lines.join('<br>');
+            }
+            const subEl = document.getElementById(subtitleElementId);
+            if (subEl && fullSubtitle) {
+                const allGreen = scenarios.length > 0 && scenarios.every(s => isScenarioGreenForAll(s.id, results));
+                subEl.innerText = allGreen ? fullSubtitle : 'Automated evaluation';
+            }
+        }
+
         function renderPhases(phases) {
             if (!phases) return;
 
@@ -1042,10 +1122,11 @@ object ScoreboardHtml {
                         <span class="badge ${'$'}{passedCount === totalCount ? 'bg-success' : 'bg-warning text-dark'}">${'$'}{passedCount}/${'$'}{totalCount} Passed (+${'$'}{passedCount} pts)</span>
                     </div>
                     <div class="font-monospace text-secondary" style="font-size: 0.72rem; max-height: 120px; overflow-y: auto;">
-                        ${'$'}{dep.results.map(r => `<div><span class="${'$'}{r.passed ? 'text-success' : 'text-danger'}">${'$'}{r.passed ? '✓' : '✗'}</span> ${'$'}{escapeHtml(r.bic)} - ${'$'}{escapeHtml(r.scenario)}</div>`).join('')}
+                        ${'$'}{dep.results.map(r => `<div><span class="${'$'}{r.passed ? 'text-success' : 'text-danger'}">${'$'}{r.passed ? '✓' : '✗'}</span> ${'$'}{escapeHtml(r.bic)} - ${'$'}{escapeHtml(getScenarioDisplayName(r.scenario, dep.results, 'deposits'))}</div>`).join('')}
                     </div>
                 `;
             }
+            updatePhaseScenarioDescriptions('deposits', dep.results, 'phaseDescDeposits', 'phaseSubtitleDeposits', '+50€ & -50€ Rejection');
 
             // Withdrawals
             const withDr = phases.withdrawals || {};
@@ -1068,10 +1149,11 @@ object ScoreboardHtml {
                         <span class="badge ${'$'}{passedCount === totalCount ? 'bg-success' : 'bg-warning text-dark'}">${'$'}{passedCount}/${'$'}{totalCount} Passed (+${'$'}{passedCount} pts)</span>
                     </div>
                     <div class="font-monospace text-secondary" style="font-size: 0.72rem; max-height: 120px; overflow-y: auto;">
-                        ${'$'}{withDr.results.map(r => `<div><span class="${'$'}{r.passed ? 'text-success' : 'text-danger'}">${'$'}{r.passed ? '✓' : '✗'}</span> ${'$'}{escapeHtml(r.bic)} - ${'$'}{escapeHtml(r.scenario)}</div>`).join('')}
+                        ${'$'}{withDr.results.map(r => `<div><span class="${'$'}{r.passed ? 'text-success' : 'text-danger'}">${'$'}{r.passed ? '✓' : '✗'}</span> ${'$'}{escapeHtml(r.bic)} - ${'$'}{escapeHtml(getScenarioDisplayName(r.scenario, withDr.results, 'withdrawals'))}</div>`).join('')}
                     </div>
                 `;
             }
+            updatePhaseScenarioDescriptions('withdrawals', withDr.results, 'phaseDescWithdrawals', 'phaseSubtitleWithdrawals', 'Happy, Negative, Overdraft');
 
             // Transfers
             const trans = phases.transfers || {};
@@ -1094,10 +1176,11 @@ object ScoreboardHtml {
                         <span class="badge ${'$'}{passedCount === totalCount ? 'bg-success' : 'bg-warning text-dark'}">${'$'}{passedCount}/${'$'}{totalCount} Passed (+${'$'}{passedCount} pts)</span>
                     </div>
                     <div class="font-monospace text-secondary" style="font-size: 0.72rem; max-height: 120px; overflow-y: auto;">
-                        ${'$'}{trans.results.map(r => `<div><span class="${'$'}{r.passed ? 'text-success' : 'text-danger'}">${'$'}{r.passed ? '✓' : '✗'}</span> ${'$'}{escapeHtml(r.bic)} - ${'$'}{escapeHtml(r.scenario)}</div>`).join('')}
+                        ${'$'}{trans.results.map(r => `<div><span class="${'$'}{r.passed ? 'text-success' : 'text-danger'}">${'$'}{r.passed ? '✓' : '✗'}</span> ${'$'}{escapeHtml(r.bic)} - ${'$'}{escapeHtml(getScenarioDisplayName(r.scenario, trans.results, 'transfers'))}</div>`).join('')}
                     </div>
                 `;
             }
+            updatePhaseScenarioDescriptions('transfers', trans.results, 'phaseDescTransfers', 'phaseSubtitleTransfers', 'Intra-Bank & Cross-Bank');
         }
 
         async function pollSimStatus() {
@@ -1148,11 +1231,11 @@ object ScoreboardHtml {
             const contentEl = document.getElementById('scenarioResultContent');
             if (!box || !contentEl) return;
 
-            const scenarioName = type === 'deposit-positive' ? '+50.00 EUR Deposit Test' :
-                                 type === 'deposit-negative' ? '-50.00 EUR Negative Deposit Test' :
-                                 type === 'withdraw' ? 'Deposit & Withdraw Test' :
-                                 'All Test Scenarios';
-            titleEl.innerHTML = '🧪 ' + scenarioName;
+            const phaseTitle = type === 'deposit' ? 'Deposits Phase Test' :
+                               type === 'withdraw' ? 'Withdrawals Phase Test' :
+                               type === 'transfer' ? 'Transfers Phase Test' :
+                               'Test Scenario Results';
+            titleEl.innerHTML = '🧪 ' + phaseTitle;
             contentEl.innerHTML = '<div class="text-secondary small d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-info" role="status"></div> Executing scenario across all banks...</div>';
             box.classList.remove('d-none');
 
@@ -1164,16 +1247,18 @@ object ScoreboardHtml {
                     let html = '<div class="mb-2 small ' + (allPassed ? 'text-success' : 'text-warning') + ' fw-semibold">' +
                         (allPassed ? '✅ All tests passed successfully!' : '⚠️ Some tests encountered issues:') +
                         '</div><div class="list-group list-group-flush rounded bg-transparent">';
+                    const phaseKey = type === 'deposit' ? 'deposits' : (type === 'withdraw' ? 'withdrawals' : (type === 'transfer' ? 'transfers' : null));
                     data.results.forEach(r => {
                         const badgeClass = r.passed ? 'bg-success' : 'bg-danger';
                         const badgeText = r.passed ? 'PASSED' : 'FAILED';
+                        const displayScenario = getScenarioDisplayName(r.scenario, data.results, phaseKey);
                         html += `
                             <div class="list-group-item bg-dark bg-opacity-75 text-light border-secondary px-3 py-2 mb-2 rounded">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <div>
                                         <span class="fw-bold">${'$'}{escapeHtml(r.bankName)}</span>
                                         <code class="text-info ms-1">${'$'}{escapeHtml(r.bic)}</code>
-                                        <span class="badge bg-secondary ms-2">${'$'}{escapeHtml(r.scenario)}</span>
+                                        <span class="badge bg-secondary ms-2">${'$'}{escapeHtml(displayScenario)}</span>
                                     </div>
                                     <span class="badge ${'$'}{badgeClass}">${'$'}{badgeText}</span>
                                 </div>
@@ -1198,7 +1283,107 @@ object ScoreboardHtml {
                 contentEl.innerHTML = '<div class="text-danger small">❌ Failed to execute scenario: ' + e + '</div>';
             }
         }
+
+        let currentEditBic = null;
+        let editTunnelModalInstance = null;
+
+        function openEditTunnelModal(bic) {
+            const bank = (lastBanks || []).find(b => b.bic === bic);
+            if (!bank) return;
+            currentEditBic = bic;
+            document.getElementById('modalBankName').innerText = bank.name;
+            document.getElementById('modalBankBic').innerText = bank.bic;
+            const input = document.getElementById('modalTunnelUrlInput');
+            input.value = bank.webhookUrl || '';
+            const alertBox = document.getElementById('modalEditAlert');
+            alertBox.classList.add('d-none');
+            alertBox.innerText = '';
+
+            const modalEl = document.getElementById('editTunnelModal');
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                if (!editTunnelModalInstance) {
+                    editTunnelModalInstance = new bootstrap.Modal(modalEl);
+                }
+                editTunnelModalInstance.show();
+            } else {
+                const newUrl = prompt('Enter new tunnel URL for ' + bank.name + ' (' + bic + '):', bank.webhookUrl || '');
+                if (newUrl !== null && newUrl.trim()) {
+                    updateTunnelUrl(bic, newUrl.trim());
+                }
+            }
+        }
+
+        async function saveTunnelUrl() {
+            if (!currentEditBic) return;
+            const input = document.getElementById('modalTunnelUrlInput');
+            const newUrl = input.value.trim();
+            const alertBox = document.getElementById('modalEditAlert');
+            if (!newUrl) {
+                alertBox.innerText = 'Tunnel URL cannot be empty.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+            const saveBtn = document.getElementById('btnSaveTunnelUrl');
+            saveBtn.disabled = true;
+            saveBtn.innerText = 'Saving...';
+            try {
+                await updateTunnelUrl(currentEditBic, newUrl);
+                if (editTunnelModalInstance) {
+                    editTunnelModalInstance.hide();
+                }
+            } catch (err) {
+                alertBox.innerText = 'Failed to update URL: ' + err.message;
+                alertBox.classList.remove('d-none');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.innerText = 'Save URL';
+            }
+        }
+
+        async function updateTunnelUrl(bic, webhookUrl) {
+            const res = await fetch('/swift/banks/' + encodeURIComponent(bic) + '/url', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ webhookUrl: webhookUrl })
+            });
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.error || ('HTTP ' + res.status));
+            }
+            await pollState();
+        }
     </script>
+
+    <!-- Edit Tunnel URL Modal -->
+    <div class="modal fade" id="editTunnelModal" tabindex="-1" aria-labelledby="editTunnelModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light border-secondary">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title" id="editTunnelModalLabel">✏️ Edit Bank Tunnel URL</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label text-secondary small">Bank Node</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <span id="modalBankName" class="fw-bold text-white"></span>
+                            <code id="modalBankBic" class="text-info"></code>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modalTunnelUrlInput" class="form-label text-light">Tunnel / Webhook URL</label>
+                        <input type="url" class="form-control bg-black text-light border-secondary" id="modalTunnelUrlInput" placeholder="https://xxx.loca.lt" required>
+                        <div class="form-text text-secondary small">Update this URL if localtunnel/ngrok reconnected with a new address while scenarios are running.</div>
+                    </div>
+                    <div id="modalEditAlert" class="alert alert-danger d-none py-2 small mb-0"></div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="btnSaveTunnelUrl" onclick="saveTunnelUrl()">Save URL</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
 """.trimIndent()

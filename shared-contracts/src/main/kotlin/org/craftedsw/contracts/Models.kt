@@ -44,6 +44,11 @@ data class RegisterBankRequest(
 )
 
 @Serializable
+data class UpdateBankUrlRequest(
+    val webhookUrl: String
+)
+
+@Serializable
 data class RegisterBankResponse(
     val status: String,
     val bic: String,

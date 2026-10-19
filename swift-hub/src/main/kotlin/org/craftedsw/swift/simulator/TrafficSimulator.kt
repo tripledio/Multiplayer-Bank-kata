@@ -526,6 +526,7 @@ class TrafficSimulator(
                 }
             } catch (e: Exception) {
                 logger.warn("Positive deposit scenario failed for ${bank.name}: ${e.message}")
+                bankRegistry.updateStatus(Bic(bank.bic), "DOWN")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                 results.add(
                     ScenarioResult(
@@ -620,6 +621,7 @@ class TrafficSimulator(
                 }
             } catch (e: Exception) {
                 logger.warn("Negative deposit scenario failed for ${bank.name}: ${e.message}")
+                bankRegistry.updateStatus(Bic(bank.bic), "DOWN")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                 results.add(
                     ScenarioResult(
@@ -762,6 +764,7 @@ class TrafficSimulator(
                 }
             } catch (e: Exception) {
                 logger.warn("Deposit & withdraw scenario failed for ${bank.name}: ${e.message}")
+                bankRegistry.updateStatus(Bic(bank.bic), "DOWN")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                 results.add(
                     ScenarioResult(
@@ -855,6 +858,7 @@ class TrafficSimulator(
                 }
             } catch (e: Exception) {
                 logger.warn("Negative withdraw scenario failed for ${bank.name}: ${e.message}")
+                bankRegistry.updateStatus(Bic(bank.bic), "DOWN")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                 results.add(
                     ScenarioResult(
@@ -969,6 +973,7 @@ class TrafficSimulator(
                 }
             } catch (e: Exception) {
                 logger.warn("Overdraft withdraw scenario failed for ${bank.name}: ${e.message}")
+                bankRegistry.updateStatus(Bic(bank.bic), "DOWN")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                 results.add(
                     ScenarioResult(
@@ -1109,6 +1114,7 @@ class TrafficSimulator(
                 }
             } catch (e: Exception) {
                 logger.warn("Intra-bank transfer scenario failed for ${bank.name}: ${e.message}")
+                bankRegistry.updateStatus(Bic(bank.bic), "DOWN")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
                 results.add(
                     ScenarioResult(
@@ -1251,6 +1257,7 @@ class TrafficSimulator(
                 }
             } catch (e: Exception) {
                 logger.warn("Cross-bank transfer scenario failed for ${bankA.name}: ${e.message}")
+                bankRegistry.updateStatus(Bic(bankA.bic), "DOWN")
                 bankRegistry.recordTransaction(Bic(bankA.bic), false, 0L)
                 results.add(
                     ScenarioResult(

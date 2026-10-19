@@ -5,7 +5,9 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.basicAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -24,6 +26,7 @@ import org.craftedsw.contracts.SimulatorStatusResponse
 import org.craftedsw.contracts.TransferRequest
 import org.craftedsw.contracts.TransferResult
 import org.craftedsw.contracts.TransferStatus
+import org.craftedsw.contracts.UpdateBankUrlRequest
 import org.craftedsw.swift.router.AuditLedger
 import org.craftedsw.swift.router.BankRegistry
 import org.craftedsw.swift.router.TransferRouter
@@ -312,6 +315,12 @@ class SwiftRoutesTest {
         assertThat(scoreboardHtml).contains("chart.js")
         assertThat(scoreboardHtml).contains("Total Money per Bank")
         assertThat(scoreboardHtml).contains("Bank Money Timeline")
+        assertThat(scoreboardHtml).contains("Scenario 1 (Hidden)")
+        assertThat(scoreboardHtml).contains("isScenarioGreenForAll")
+        assertThat(scoreboardHtml).contains("getScenarioDisplayName")
+        assertThat(scoreboardHtml).contains("Network health")
+        assertThat(scoreboardHtml).contains("Edit URL")
+        assertThat(scoreboardHtml).contains("editTunnelModal")
     }
 
     @Test
@@ -500,5 +509,53 @@ class SwiftRoutesTest {
         }
         assertThat(onlyPass.username).isEqualTo("secretkey")
         assertThat(onlyPass.password).isEqualTo("secretkey")
+    }
+
+    @Test
+    fun `update bank webhook url endpoints should update url and require authentication`() = testApplication {
+        val registry = BankRegistry()
+        registry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "https://alpha-old.loca.lt"))
+        application {
+            swiftHubModule(bankRegistry = registry)
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+        }
+
+        // Unauthenticated PUT should fail
+        val unauthRes = client.put("/swift/banks/BANKAXXX/url") {
+            contentType(ContentType.Application.Json)
+            setBody(UpdateBankUrlRequest(webhookUrl = "https://alpha-new.loca.lt"))
+        }
+        assertThat(unauthRes.status).isEqualTo(HttpStatusCode.Unauthorized)
+
+        // Authenticated PUT
+        val putRes = client.put("/swift/banks/BANKAXXX/url") {
+            basicAuth("admin", "admin")
+            contentType(ContentType.Application.Json)
+            setBody(UpdateBankUrlRequest(webhookUrl = "https://alpha-new.loca.lt/"))
+        }
+        assertThat(putRes.status).isEqualTo(HttpStatusCode.OK)
+        val updated = putRes.body<BankNodeInfo>()
+        assertThat(updated.webhookUrl).isEqualTo("https://alpha-new.loca.lt")
+        assertThat(updated.status).isEqualTo("HEALTHY")
+
+        // Authenticated PATCH alias
+        val patchRes = client.patch("/swift/banks/BANKAXXX") {
+            basicAuth("admin", "admin")
+            contentType(ContentType.Application.Json)
+            setBody(UpdateBankUrlRequest(webhookUrl = "https://alpha-patched.loca.lt"))
+        }
+        assertThat(patchRes.status).isEqualTo(HttpStatusCode.OK)
+        assertThat(patchRes.body<BankNodeInfo>().webhookUrl).isEqualTo("https://alpha-patched.loca.lt")
+
+        // Non-existent bank
+        val notFoundRes = client.put("/swift/banks/UNKNOWN/url") {
+            basicAuth("admin", "admin")
+            contentType(ContentType.Application.Json)
+            setBody(UpdateBankUrlRequest(webhookUrl = "https://unknown.loca.lt"))
+        }
+        assertThat(notFoundRes.status).isEqualTo(HttpStatusCode.NotFound)
     }
 }

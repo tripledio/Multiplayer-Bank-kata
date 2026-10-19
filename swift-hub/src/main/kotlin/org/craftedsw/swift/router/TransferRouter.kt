@@ -72,6 +72,7 @@ class TransferRouter(
             response
         } catch (e: Exception) {
             logger.warn("Transfer to ${destNode.name} (${destNode.bic}) failed: ${e.message}")
+            bankRegistry.updateStatus(destBic, "DOWN")
             bankRegistry.recordTransaction(destBic, false, -10L)
             TransferResult(
                 transactionId = txId,

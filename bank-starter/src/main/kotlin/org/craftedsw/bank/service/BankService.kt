@@ -30,10 +30,6 @@ class BankService {
         }
     }
 
-    // 1
-    // happy case deposit 50
-    // unhappy case deposit -50
-    //
     fun deposit(request: DepositRequest, date: Date = Date()): Result<Long> {
         if (request.amountCents <= 0) {
             return Result.failure(IllegalArgumentException("Deposit amount must be positive"))
