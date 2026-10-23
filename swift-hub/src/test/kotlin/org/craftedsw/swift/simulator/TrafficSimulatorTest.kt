@@ -456,4 +456,52 @@ class TrafficSimulatorTest {
 
         assertThat(ledger.formatExpectedSummary()).contains("Expected: Balance 30.00 EUR | Statement (2 lines)")
     }
+
+    @Test
+    fun `failing scenario should deliver debug report in IntelliJ HTTP format to bank debug endpoint`() = runTest {
+        bankRegistry.register(RegisterBankRequest(bic = "BANKAXXX", name = "Bank Alpha", webhookUrl = "http://alpha:8080"))
+
+        val capturedDebugReports = mutableListOf<String>()
+
+        val mockEngine = MockEngine { request ->
+            val url = request.url.encodedPath
+            if (url.endsWith("/api/deposit")) {
+                // Return 400 Bad Request to simulate failure
+                respond(
+                    content = "{\"error\": \"Deposit validation failed\"}",
+                    status = HttpStatusCode.BadRequest,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else if (url.endsWith("/api/debug")) {
+                val content = (request.body as? io.ktor.http.content.OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString()
+                    ?: (request.body as? io.ktor.http.content.OutgoingContent.NoContent)?.let { "" } ?: request.body.toString()
+                capturedDebugReports.add(content)
+                respond(
+                    content = "{\"status\": \"RECORDED\"}",
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+            } else {
+                respond(content = "Not Found", status = HttpStatusCode.NotFound)
+            }
+        }
+
+        val mockHttpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) { json() }
+        }
+
+        val sim = TrafficSimulator(bankRegistry, transferRouter, mockHttpClient)
+        val results = sim.runPositiveDepositScenario()
+
+        assertThat(results).hasSize(1)
+        assertThat(results.first().passed).isFalse()
+
+        assertThat(capturedDebugReports).hasSize(1)
+        val debugReportJson = capturedDebugReports.first()
+        assertThat(debugReportJson).contains("DEPOSIT_50_EUR")
+        assertThat(debugReportJson).contains("POST http://alpha:8080/api/deposit")
+        assertThat(debugReportJson).contains("Content-Type: application/json")
+        assertThat(debugReportJson).contains("HTTP 200 OK")
+        assertThat(debugReportJson).contains("HTTP 400")
+    }
 }

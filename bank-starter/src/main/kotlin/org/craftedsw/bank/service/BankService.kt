@@ -9,6 +9,7 @@ import org.craftedsw.contracts.WithdrawRequest
 
 class BankService {
 
+    // implement this one
     fun deposit(request: DepositRequest, date: Date = Date()): Result<Long> {
         TODO("Not yet implemented")
     }
@@ -25,6 +26,7 @@ class BankService {
         TODO("Not yet implemented")
     }
 
+    // and this one
     fun getBalanceCents(ibanStr: String): Long {
         TODO("Not yet implemented")
     }

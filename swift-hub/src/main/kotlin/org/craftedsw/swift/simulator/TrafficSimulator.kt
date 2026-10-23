@@ -11,6 +11,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -22,6 +23,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.craftedsw.contracts.BalanceResponse
 import org.craftedsw.contracts.Bic
+import org.craftedsw.contracts.DebugReport
 import org.craftedsw.contracts.DepositRequest
 import org.craftedsw.contracts.ScenarioPhaseStatus
 import org.craftedsw.contracts.ScenarioResult
@@ -420,6 +422,84 @@ class TrafficSimulator(
         return false
     }
 
+    private suspend fun sendDebugFailure(
+        webhookUrl: String,
+        scenario: String,
+        message: String,
+        httpRequest: String,
+        expectedResponse: String,
+        actualResponse: String
+    ) {
+        try {
+            val report = DebugReport(
+                id = UUID.randomUUID().toString(),
+                timestamp = System.currentTimeMillis(),
+                scenario = scenario,
+                message = message,
+                httpRequest = httpRequest,
+                expectedResponse = expectedResponse,
+                actualResponse = actualResponse,
+                passed = false
+            )
+            httpClient.post("$webhookUrl/api/debug") {
+                contentType(ContentType.Application.Json)
+                setBody(report)
+            }
+        } catch (e: Exception) {
+            logger.debug("Could not deliver debug report to $webhookUrl: ${e.message}")
+        }
+    }
+
+    private fun formatDepositHttp(webhookUrl: String, title: String, iban: String, amountCents: Long): String {
+        return """
+### $title
+POST $webhookUrl/api/deposit
+Content-Type: application/json
+
+{
+  "iban": "$iban",
+  "amountCents": $amountCents
+}
+        """.trimIndent()
+    }
+
+    private fun formatWithdrawHttp(webhookUrl: String, title: String, iban: String, amountCents: Long): String {
+        return """
+### $title
+POST $webhookUrl/api/withdraw
+Content-Type: application/json
+
+{
+  "iban": "$iban",
+  "amountCents": $amountCents
+}
+        """.trimIndent()
+    }
+
+    private fun formatStatementHttp(webhookUrl: String, title: String, iban: String): String {
+        return """
+### $title
+GET $webhookUrl/api/statement/$iban
+        """.trimIndent()
+    }
+
+    private fun formatTransferInHttp(webhookUrl: String, title: String, req: TransferRequest): String {
+        return """
+### $title
+POST $webhookUrl/api/transfer-in
+Content-Type: application/json
+
+{
+  "transactionId": "${req.transactionId}",
+  "fromIban": "${req.fromIban}",
+  "toIban": "${req.toIban}",
+  "amountCents": ${req.amountCents},
+  "timestamp": "${req.timestamp}",
+  "reference": "${req.reference}"
+}
+        """.trimIndent()
+    }
+
     suspend fun runPositiveDepositScenario(): List<ScenarioResult> {
         val banks = bankRegistry.getAllBanks()
         val results = mutableListOf<ScenarioResult>()
@@ -441,15 +521,25 @@ class TrafficSimulator(
                     checkResponseTunnelStatus(Bic(bank.bic), depositResponse.status)
                     val errorBody = depositResponse.bodyAsText()
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Deposit failed with status ${depositResponse.status.value}: $errorBody"
+                    val actual = "Actual: Deposit HTTP ${depositResponse.status.value} ($errorBody)"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "DEPOSIT_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatDepositHttp(bank.webhookUrl, "Deposit 50.00 EUR", iban, depositAmountCents),
+                        expectedResponse = "HTTP 200 OK\n{\n  \"iban\": \"$iban\",\n  \"balanceCents\": $depositAmountCents\n}",
+                        actualResponse = "HTTP ${depositResponse.status.value}\n$errorBody"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "DEPOSIT_50_EUR",
                             passed = false,
-                            message = "Deposit failed with status ${depositResponse.status.value}: $errorBody",
+                            message = failureMsg,
                             expected = expectedStr,
-                            actual = "Actual: Deposit HTTP ${depositResponse.status.value} ($errorBody)"
+                            actual = actual
                         )
                     )
                     continue
@@ -458,15 +548,25 @@ class TrafficSimulator(
                 val depositBody: BalanceResponse = depositResponse.body()
                 if (depositBody.balanceCents != depositAmountCents) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Expected balance $depositAmountCents cents, but deposit response returned ${depositBody.balanceCents} cents"
+                    val actual = "Actual: Deposit balance returned ${ScenarioLedger.formatAmount(depositBody.balanceCents)} EUR"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "DEPOSIT_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatDepositHttp(bank.webhookUrl, "Deposit 50.00 EUR", iban, depositAmountCents),
+                        expectedResponse = "HTTP 200 OK\n{\n  \"iban\": \"$iban\",\n  \"balanceCents\": $depositAmountCents\n}",
+                        actualResponse = "HTTP 200 OK\n{\n  \"iban\": \"${depositBody.iban}\",\n  \"balanceCents\": ${depositBody.balanceCents}\n}"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "DEPOSIT_50_EUR",
                             passed = false,
-                            message = "Expected balance $depositAmountCents cents, but deposit response returned ${depositBody.balanceCents} cents",
+                            message = failureMsg,
                             expected = expectedStr,
-                            actual = "Actual: Deposit balance returned ${ScenarioLedger.formatAmount(depositBody.balanceCents)} EUR"
+                            actual = actual
                         )
                     )
                     continue
@@ -480,13 +580,22 @@ class TrafficSimulator(
 
                 if (statementResponse.status != HttpStatusCode.OK || statement == null) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Statement query failed with status ${statementResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "DEPOSIT_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatStatementHttp(bank.webhookUrl, "Query Statement for Account", iban),
+                        expectedResponse = "HTTP 200 OK\n$expectedStr",
+                        actualResponse = "HTTP ${statementResponse.status.value}"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "DEPOSIT_50_EUR",
                             passed = false,
-                            message = "Statement query failed with status ${statementResponse.status.value}",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = actualStr
                         )
@@ -522,6 +631,14 @@ class TrafficSimulator(
                     } else {
                         "Statement lines do not match expected format"
                     }
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "DEPOSIT_50_EUR",
+                        message = mismatchReason,
+                        httpRequest = formatStatementHttp(bank.webhookUrl, "Query Statement for Account", iban),
+                        expectedResponse = "HTTP 200 OK\n$expectedStr",
+                        actualResponse = "HTTP 200 OK\n$actualStr"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
@@ -539,6 +656,14 @@ class TrafficSimulator(
                 logger.warn("Positive deposit scenario failed for ${bank.name}: $err")
                 bankRegistry.updateStatus(Bic(bank.bic), "DOWN", null, "Unreachable: ${err.take(50)}")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                sendDebugFailure(
+                    webhookUrl = bank.webhookUrl,
+                    scenario = "DEPOSIT_50_EUR",
+                    message = "Exception during test: $err",
+                    httpRequest = formatDepositHttp(bank.webhookUrl, "Deposit 50.00 EUR", iban, depositAmountCents),
+                    expectedResponse = "HTTP 200 OK",
+                    actualResponse = "Exception: $err"
+                )
                 results.add(
                     ScenarioResult(
                         bic = bank.bic,
@@ -576,15 +701,25 @@ class TrafficSimulator(
                 if (checkResponseTunnelStatus(Bic(bank.bic), depositResponse.status)) {
                     val errorBody = depositResponse.bodyAsText()
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Negative deposit test failed with server/tunnel error ${depositResponse.status.value}: $errorBody"
+                    val actual = "Actual: HTTP ${depositResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "DEPOSIT_NEGATIVE_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatDepositHttp(bank.webhookUrl, "Attempt Negative Deposit (-50.00 EUR)", iban, negativeDepositAmountCents),
+                        expectedResponse = "HTTP 400 Bad Request or HTTP 422 Unprocessable Entity\n(Rejection of negative deposit)",
+                        actualResponse = "HTTP ${depositResponse.status.value}\n$errorBody"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "DEPOSIT_NEGATIVE_50_EUR",
                             passed = false,
-                            message = "Negative deposit test failed with server/tunnel error ${depositResponse.status.value}: $errorBody",
+                            message = failureMsg,
                             expected = expectedStr,
-                            actual = "Actual: HTTP ${depositResponse.status.value}"
+                            actual = actual
                         )
                     )
                     continue
@@ -595,15 +730,25 @@ class TrafficSimulator(
 
                 if (!receivedClientError) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Expected bank to reject negative deposit with 400/422, but received ${depositResponse.status}"
+                    val actual = "Actual: Deposit accepted with HTTP ${depositResponse.status}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "DEPOSIT_NEGATIVE_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatDepositHttp(bank.webhookUrl, "Attempt Negative Deposit (-50.00 EUR)", iban, negativeDepositAmountCents),
+                        expectedResponse = "HTTP 400 Bad Request or HTTP 422 Unprocessable Entity\n(Negative deposit should be rejected)",
+                        actualResponse = "HTTP ${depositResponse.status.value} (Deposit was improperly accepted)"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "DEPOSIT_NEGATIVE_50_EUR",
                             passed = false,
-                            message = "Expected bank to reject negative deposit with 400/422, but received ${depositResponse.status}",
+                            message = failureMsg,
                             expected = expectedStr,
-                            actual = "Actual: Deposit accepted with HTTP ${depositResponse.status}"
+                            actual = actual
                         )
                     )
                     continue
@@ -613,15 +758,25 @@ class TrafficSimulator(
                 val statementResponse: HttpResponse = httpClient.get("${bank.webhookUrl}/api/statement/$iban")
                 if (checkResponseTunnelStatus(Bic(bank.bic), statementResponse.status)) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Statement check failed with server/tunnel error ${statementResponse.status.value}"
+                    val actual = "Actual: HTTP ${statementResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "DEPOSIT_NEGATIVE_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatStatementHttp(bank.webhookUrl, "Query Statement for Rejected Account", iban),
+                        expectedResponse = "HTTP 400 / HTTP 404 or empty statement (No account created)",
+                        actualResponse = "HTTP ${statementResponse.status.value}"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "DEPOSIT_NEGATIVE_50_EUR",
                             passed = false,
-                            message = "Statement check failed with server/tunnel error ${statementResponse.status.value}",
+                            message = failureMsg,
                             expected = expectedStr,
-                            actual = "Actual: HTTP ${statementResponse.status.value}"
+                            actual = actual
                         )
                     )
                     continue
@@ -638,13 +793,22 @@ class TrafficSimulator(
 
                 if (accountHasZero) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Deposit of negative amount failed, but account was created with 0 EUR statement"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "DEPOSIT_NEGATIVE_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatDepositHttp(bank.webhookUrl, "Attempt Negative Deposit (-50.00 EUR)", iban, negativeDepositAmountCents),
+                        expectedResponse = "No account created or empty lines on rejected deposit",
+                        actualResponse = "Account exists with 0.00 EUR statement and lines: ${statement?.lines}"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "DEPOSIT_NEGATIVE_50_EUR",
                             passed = false,
-                            message = "Deposit of negative amount failed, but account was created with 0 EUR statement",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = actualStr
                         )
@@ -668,6 +832,14 @@ class TrafficSimulator(
                 logger.warn("Negative deposit scenario failed for ${bank.name}: $err")
                 bankRegistry.updateStatus(Bic(bank.bic), "DOWN", null, "Unreachable: ${err.take(50)}")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                sendDebugFailure(
+                    webhookUrl = bank.webhookUrl,
+                    scenario = "DEPOSIT_NEGATIVE_50_EUR",
+                    message = "Exception during test: $err",
+                    httpRequest = formatDepositHttp(bank.webhookUrl, "Attempt Negative Deposit (-50.00 EUR)", iban, negativeDepositAmountCents),
+                    expectedResponse = "HTTP 400 Bad Request or HTTP 422 Unprocessable Entity",
+                    actualResponse = "Exception: $err"
+                )
                 results.add(
                     ScenarioResult(
                         bic = bank.bic,
@@ -710,15 +882,25 @@ class TrafficSimulator(
                     checkResponseTunnelStatus(Bic(bank.bic), depositResponse.status)
                     val errorBody = depositResponse.bodyAsText()
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Initial deposit of 50.00 EUR failed with status ${depositResponse.status.value}: $errorBody"
+                    val actual = "Actual: Deposit HTTP ${depositResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_HAPPY_20_EUR",
+                        message = failureMsg,
+                        httpRequest = formatDepositHttp(bank.webhookUrl, "Initial Deposit for Withdrawal Test", iban, depositAmountCents),
+                        expectedResponse = "HTTP 200 OK\n{\n  \"iban\": \"$iban\",\n  \"balanceCents\": $depositAmountCents\n}",
+                        actualResponse = "HTTP ${depositResponse.status.value}\n$errorBody"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_HAPPY_20_EUR",
                             passed = false,
-                            message = "Initial deposit of 50.00 EUR failed with status ${depositResponse.status.value}: $errorBody",
+                            message = failureMsg,
                             expected = expectedStr,
-                            actual = "Actual: Deposit HTTP ${depositResponse.status.value}"
+                            actual = actual
                         )
                     )
                     continue
@@ -734,15 +916,25 @@ class TrafficSimulator(
                     checkResponseTunnelStatus(Bic(bank.bic), withdrawResponse.status)
                     val errorBody = withdrawResponse.bodyAsText()
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Withdrawal of 20.00 EUR failed with status ${withdrawResponse.status.value}: $errorBody"
+                    val actual = "Actual: Withdrawal HTTP ${withdrawResponse.status.value} ($errorBody)"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_HAPPY_20_EUR",
+                        message = failureMsg,
+                        httpRequest = formatWithdrawHttp(bank.webhookUrl, "Withdraw 20.00 EUR (after 50.00 EUR deposit)", iban, withdrawAmountCents),
+                        expectedResponse = "HTTP 200 OK\n{\n  \"iban\": \"$iban\",\n  \"balanceCents\": 3000\n}",
+                        actualResponse = "HTTP ${withdrawResponse.status.value}\n$errorBody"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_HAPPY_20_EUR",
                             passed = false,
-                            message = "Withdrawal of 20.00 EUR failed with status ${withdrawResponse.status.value}: $errorBody",
+                            message = failureMsg,
                             expected = expectedStr,
-                            actual = "Actual: Withdrawal HTTP ${withdrawResponse.status.value} ($errorBody)"
+                            actual = actual
                         )
                     )
                     continue
@@ -756,13 +948,22 @@ class TrafficSimulator(
 
                 if (statementResponse.status != HttpStatusCode.OK || statement == null) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Statement query failed with status ${statementResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_HAPPY_20_EUR",
+                        message = failureMsg,
+                        httpRequest = formatStatementHttp(bank.webhookUrl, "Query Statement after Withdrawal", iban),
+                        expectedResponse = "HTTP 200 OK\n$expectedStr",
+                        actualResponse = "HTTP ${statementResponse.status.value}"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_HAPPY_20_EUR",
                             passed = false,
-                            message = "Statement query failed with status ${statementResponse.status.value}",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = actualStr
                         )
@@ -798,6 +999,14 @@ class TrafficSimulator(
                     } else {
                         "Statement lines do not match expected format"
                     }
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_HAPPY_20_EUR",
+                        message = mismatchReason,
+                        httpRequest = formatStatementHttp(bank.webhookUrl, "Query Statement after Withdrawal", iban),
+                        expectedResponse = "HTTP 200 OK\n$expectedStr",
+                        actualResponse = "HTTP 200 OK\n$actualStr"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
@@ -815,6 +1024,14 @@ class TrafficSimulator(
                 logger.warn("Deposit & withdraw scenario failed for ${bank.name}: $err")
                 bankRegistry.updateStatus(Bic(bank.bic), "DOWN", null, "Unreachable: ${err.take(50)}")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                sendDebugFailure(
+                    webhookUrl = bank.webhookUrl,
+                    scenario = "WITHDRAW_HAPPY_20_EUR",
+                    message = "Exception during test: $err",
+                    httpRequest = formatWithdrawHttp(bank.webhookUrl, "Withdraw 20.00 EUR", iban, withdrawAmountCents),
+                    expectedResponse = "HTTP 200 OK",
+                    actualResponse = "Exception: $err"
+                )
                 results.add(
                     ScenarioResult(
                         bic = bank.bic,
@@ -853,15 +1070,25 @@ class TrafficSimulator(
                 if (checkResponseTunnelStatus(Bic(bank.bic), withdrawResponse.status)) {
                     val errorBody = withdrawResponse.bodyAsText()
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Negative withdrawal test failed with server/tunnel error ${withdrawResponse.status.value}: $errorBody"
+                    val actual = "Actual: HTTP ${withdrawResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_NEGATIVE_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatWithdrawHttp(bank.webhookUrl, "Attempt Negative Withdrawal (-50.00 EUR)", iban, negativeWithdrawAmountCents),
+                        expectedResponse = "HTTP 400 Bad Request or HTTP 422 Unprocessable Entity\n(Negative withdrawal should be rejected)",
+                        actualResponse = "HTTP ${withdrawResponse.status.value}\n$errorBody"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_NEGATIVE_50_EUR",
                             passed = false,
-                            message = "Negative withdrawal test failed with server/tunnel error ${withdrawResponse.status.value}: $errorBody",
+                            message = failureMsg,
                             expected = expectedStr,
-                            actual = "Actual: HTTP ${withdrawResponse.status.value}"
+                            actual = actual
                         )
                     )
                     continue
@@ -871,13 +1098,22 @@ class TrafficSimulator(
 
                 if (!receivedClientError) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Expected bank to reject negative withdrawal with 400/422, but received ${withdrawResponse.status}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_NEGATIVE_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatWithdrawHttp(bank.webhookUrl, "Attempt Negative Withdrawal (-50.00 EUR)", iban, negativeWithdrawAmountCents),
+                        expectedResponse = "HTTP 400 Bad Request or HTTP 422 Unprocessable Entity",
+                        actualResponse = "HTTP ${withdrawResponse.status.value} (Withdrawal was improperly accepted)"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_NEGATIVE_50_EUR",
                             passed = false,
-                            message = "Expected bank to reject negative withdrawal with 400/422, but received ${withdrawResponse.status}",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = "Actual: Withdrawal accepted with HTTP ${withdrawResponse.status}"
                         )
@@ -888,13 +1124,22 @@ class TrafficSimulator(
                 val statementResponse: HttpResponse = httpClient.get("${bank.webhookUrl}/api/statement/$iban")
                 if (checkResponseTunnelStatus(Bic(bank.bic), statementResponse.status)) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Statement check failed with server/tunnel error ${statementResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_NEGATIVE_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatStatementHttp(bank.webhookUrl, "Query Statement for Rejected Withdrawal", iban),
+                        expectedResponse = "HTTP 400 / HTTP 404 or empty statement",
+                        actualResponse = "HTTP ${statementResponse.status.value}"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_NEGATIVE_50_EUR",
                             passed = false,
-                            message = "Statement check failed with server/tunnel error ${statementResponse.status.value}",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = "Actual: HTTP ${statementResponse.status.value}"
                         )
@@ -913,13 +1158,22 @@ class TrafficSimulator(
 
                 if (accountHasPositive) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Negative withdrawal created positive balance on account"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_NEGATIVE_50_EUR",
+                        message = failureMsg,
+                        httpRequest = formatWithdrawHttp(bank.webhookUrl, "Attempt Negative Withdrawal (-50.00 EUR)", iban, negativeWithdrawAmountCents),
+                        expectedResponse = "Balance <= 0 or rejected",
+                        actualResponse = "Balance = ${statement?.currentBalanceCents} cents"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_NEGATIVE_50_EUR",
                             passed = false,
-                            message = "Negative withdrawal created positive balance on account",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = actualStr
                         )
@@ -943,6 +1197,14 @@ class TrafficSimulator(
                 logger.warn("Negative withdraw scenario failed for ${bank.name}: $err")
                 bankRegistry.updateStatus(Bic(bank.bic), "DOWN", null, "Unreachable: ${err.take(50)}")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                sendDebugFailure(
+                    webhookUrl = bank.webhookUrl,
+                    scenario = "WITHDRAW_NEGATIVE_50_EUR",
+                    message = "Exception during test: $err",
+                    httpRequest = formatWithdrawHttp(bank.webhookUrl, "Attempt Negative Withdrawal (-50.00 EUR)", iban, negativeWithdrawAmountCents),
+                    expectedResponse = "HTTP 400 Bad Request or HTTP 422 Unprocessable Entity",
+                    actualResponse = "Exception: $err"
+                )
                 results.add(
                     ScenarioResult(
                         bic = bank.bic,
@@ -985,15 +1247,25 @@ class TrafficSimulator(
                     checkResponseTunnelStatus(Bic(bank.bic), depositResponse.status)
                     val errorBody = depositResponse.bodyAsText()
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Initial deposit of 20.00 EUR failed: $errorBody"
+                    val actual = "Actual: Deposit HTTP ${depositResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                        message = failureMsg,
+                        httpRequest = formatDepositHttp(bank.webhookUrl, "Deposit 20.00 EUR (Overdraft Test Setup)", iban, depositAmountCents),
+                        expectedResponse = "HTTP 200 OK\n{\n  \"iban\": \"$iban\",\n  \"balanceCents\": $depositAmountCents\n}",
+                        actualResponse = "HTTP ${depositResponse.status.value}\n$errorBody"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
                             passed = false,
-                            message = "Initial deposit of 20.00 EUR failed: $errorBody",
+                            message = failureMsg,
                             expected = expectedStr,
-                            actual = "Actual: Deposit HTTP ${depositResponse.status.value}"
+                            actual = actual
                         )
                     )
                     continue
@@ -1008,15 +1280,25 @@ class TrafficSimulator(
                 if (checkResponseTunnelStatus(Bic(bank.bic), withdrawResponse.status)) {
                     val errorBody = withdrawResponse.bodyAsText()
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Overdraft withdrawal test failed with server/tunnel error ${withdrawResponse.status.value}: $errorBody"
+                    val actual = "Actual: HTTP ${withdrawResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                        message = failureMsg,
+                        httpRequest = formatWithdrawHttp(bank.webhookUrl, "Attempt Overdraft Withdrawal (50.00 EUR when balance is 20.00 EUR)", iban, overWithdrawAmountCents),
+                        expectedResponse = "HTTP 400 Bad Request or HTTP 422 Unprocessable Entity\n(Insufficient funds)",
+                        actualResponse = "HTTP ${withdrawResponse.status.value}\n$errorBody"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
                             passed = false,
-                            message = "Overdraft withdrawal test failed with server/tunnel error ${withdrawResponse.status.value}: $errorBody",
+                            message = failureMsg,
                             expected = expectedStr,
-                            actual = "Actual: HTTP ${withdrawResponse.status.value}"
+                            actual = actual
                         )
                     )
                     continue
@@ -1026,13 +1308,22 @@ class TrafficSimulator(
 
                 if (!receivedClientError) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Expected bank to reject withdrawal of 50.00 EUR when balance is 20.00 EUR, but received ${withdrawResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                        message = failureMsg,
+                        httpRequest = formatWithdrawHttp(bank.webhookUrl, "Attempt Overdraft Withdrawal (50.00 EUR when balance is 20.00 EUR)", iban, overWithdrawAmountCents),
+                        expectedResponse = "HTTP 400 Bad Request or HTTP 422 Unprocessable Entity (Insufficient funds)",
+                        actualResponse = "HTTP ${withdrawResponse.status.value} (Overdraft was improperly permitted)"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
                             passed = false,
-                            message = "Expected bank to reject withdrawal of 50.00 EUR when balance is 20.00 EUR, but received ${withdrawResponse.status.value}",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = "Actual: Withdrawal accepted with HTTP ${withdrawResponse.status.value}"
                         )
@@ -1044,13 +1335,22 @@ class TrafficSimulator(
                 val statementResponse: HttpResponse = httpClient.get("${bank.webhookUrl}/api/statement/$iban")
                 if (checkResponseTunnelStatus(Bic(bank.bic), statementResponse.status)) {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Statement check failed with server/tunnel error ${statementResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                        message = failureMsg,
+                        httpRequest = formatStatementHttp(bank.webhookUrl, "Query Statement after Rejected Overdraft", iban),
+                        expectedResponse = "HTTP 200 OK with balance 20.00 EUR",
+                        actualResponse = "HTTP ${statementResponse.status.value}"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
                             passed = false,
-                            message = "Statement check failed with server/tunnel error ${statementResponse.status.value}",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = "Actual: HTTP ${statementResponse.status.value}"
                         )
@@ -1076,13 +1376,22 @@ class TrafficSimulator(
                     )
                 } else {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Withdrawal was rejected but statement balance changed from 20.00 EUR"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                        message = failureMsg,
+                        httpRequest = formatStatementHttp(bank.webhookUrl, "Query Statement after Rejected Overdraft", iban),
+                        expectedResponse = "Balance must remain intact at 20.00 EUR",
+                        actualResponse = "Statement balance: ${statement?.currentBalanceCents} cents"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
                             passed = false,
-                            message = "Withdrawal was rejected but statement balance changed from 20.00 EUR",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = actualStr
                         )
@@ -1093,6 +1402,14 @@ class TrafficSimulator(
                 logger.warn("Overdraft withdraw scenario failed for ${bank.name}: $err")
                 bankRegistry.updateStatus(Bic(bank.bic), "DOWN", null, "Unreachable: ${err.take(50)}")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                sendDebugFailure(
+                    webhookUrl = bank.webhookUrl,
+                    scenario = "WITHDRAW_INSUFFICIENT_FUNDS",
+                    message = "Exception during test: $err",
+                    httpRequest = formatWithdrawHttp(bank.webhookUrl, "Attempt Overdraft Withdrawal", iban, overWithdrawAmountCents),
+                    expectedResponse = "HTTP 400 Bad Request or HTTP 422 Unprocessable Entity",
+                    actualResponse = "Exception: $err"
+                )
                 results.add(
                     ScenarioResult(
                         bic = bank.bic,
@@ -1140,13 +1457,22 @@ class TrafficSimulator(
                 if (depositResponse.status != HttpStatusCode.OK) {
                     checkResponseTunnelStatus(Bic(bank.bic), depositResponse.status)
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Initial deposit to sender IBAN failed: ${depositResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "INTRA_BANK_TRANSFER",
+                        message = failureMsg,
+                        httpRequest = formatDepositHttp(bank.webhookUrl, "Deposit 50.00 EUR to Sender Account", ibanFrom, initialDepositCents),
+                        expectedResponse = "HTTP 200 OK\n{\n  \"iban\": \"$ibanFrom\",\n  \"balanceCents\": $initialDepositCents\n}",
+                        actualResponse = "HTTP ${depositResponse.status.value}"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "INTRA_BANK_TRANSFER",
                             passed = false,
-                            message = "Initial deposit to sender IBAN failed: ${depositResponse.status.value}",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = "Actual: Deposit HTTP ${depositResponse.status.value}"
                         )
@@ -1180,13 +1506,26 @@ class TrafficSimulator(
                     checkResponseTunnelStatus(Bic(bank.bic), withdrawSenderResponse.status)
                     checkResponseTunnelStatus(Bic(bank.bic), transferInReceiverResponse.status)
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val failureMsg = "Intra-bank transfer failed: Sender debit status=${withdrawSenderResponse.status.value}, Receiver credit status=${transferInReceiverResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "INTRA_BANK_TRANSFER",
+                        message = failureMsg,
+                        httpRequest = if (withdrawSenderResponse.status != HttpStatusCode.OK) {
+                            formatWithdrawHttp(bank.webhookUrl, "Debit Sender for Intra-Bank Transfer", ibanFrom, transferAmountCents)
+                        } else {
+                            formatTransferInHttp(bank.webhookUrl, "Credit Receiver for Intra-Bank Transfer", transferRequest)
+                        },
+                        expectedResponse = "HTTP 200 OK (Accepted debit & incoming transfer webhook)",
+                        actualResponse = "Debit: HTTP ${withdrawSenderResponse.status.value}, Credit: HTTP ${transferInReceiverResponse.status.value}"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "INTRA_BANK_TRANSFER",
                             passed = false,
-                            message = "Intra-bank transfer failed: Sender debit status=${withdrawSenderResponse.status.value}, Receiver credit status=${transferInReceiverResponse.status.value}",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = "Actual: Debit HTTP ${withdrawSenderResponse.status.value}, Credit HTTP ${transferInReceiverResponse.status.value}"
                         )
@@ -1223,13 +1562,22 @@ class TrafficSimulator(
                     )
                 } else {
                     bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                    val mismatchReason = "Intra-bank transfer verification failed: FromBalance=${stmtFrom?.currentBalanceCents} (expected ${ledgerFrom.expectedBalanceCents}), ToBalance=${stmtTo?.currentBalanceCents} (expected ${ledgerTo.expectedBalanceCents})"
+                    sendDebugFailure(
+                        webhookUrl = bank.webhookUrl,
+                        scenario = "INTRA_BANK_TRANSFER",
+                        message = mismatchReason,
+                        httpRequest = formatStatementHttp(bank.webhookUrl, "Query Statement for Sender", ibanFrom),
+                        expectedResponse = expectedStr,
+                        actualResponse = actualStr
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bank.bic,
                             bankName = bank.name,
                             scenario = "INTRA_BANK_TRANSFER",
                             passed = false,
-                            message = "Intra-bank transfer verification failed: FromBalance=${stmtFrom?.currentBalanceCents} (expected ${ledgerFrom.expectedBalanceCents}), ToBalance=${stmtTo?.currentBalanceCents} (expected ${ledgerTo.expectedBalanceCents})",
+                            message = mismatchReason,
                             expected = expectedStr,
                             actual = actualStr
                         )
@@ -1240,6 +1588,14 @@ class TrafficSimulator(
                 logger.warn("Intra-bank transfer scenario failed for ${bank.name}: $err")
                 bankRegistry.updateStatus(Bic(bank.bic), "DOWN", null, "Unreachable: ${err.take(50)}")
                 bankRegistry.recordTransaction(Bic(bank.bic), false, 0L)
+                sendDebugFailure(
+                    webhookUrl = bank.webhookUrl,
+                    scenario = "INTRA_BANK_TRANSFER",
+                    message = "Exception during test: $err",
+                    httpRequest = formatTransferInHttp(bank.webhookUrl, "Intra-Bank Transfer", TransferRequest(fromIban = ibanFrom, toIban = ibanTo, amountCents = transferAmountCents)),
+                    expectedResponse = "HTTP 200 OK",
+                    actualResponse = "Exception: $err"
+                )
                 results.add(
                     ScenarioResult(
                         bic = bank.bic,
@@ -1292,13 +1648,22 @@ class TrafficSimulator(
                 if (depositResponse.status != HttpStatusCode.OK) {
                     checkResponseTunnelStatus(Bic(bankA.bic), depositResponse.status)
                     bankRegistry.recordTransaction(Bic(bankA.bic), false, 0L)
+                    val failureMsg = "Initial deposit to sender IBAN at ${bankA.name} failed: ${depositResponse.status.value}"
+                    sendDebugFailure(
+                        webhookUrl = bankA.webhookUrl,
+                        scenario = "CROSS_BANK_TRANSFER",
+                        message = failureMsg,
+                        httpRequest = formatDepositHttp(bankA.webhookUrl, "Deposit 50.00 EUR to Bank A Sender Account", ibanFrom, initialDepositCents),
+                        expectedResponse = "HTTP 200 OK\n{\n  \"iban\": \"$ibanFrom\",\n  \"balanceCents\": $initialDepositCents\n}",
+                        actualResponse = "HTTP ${depositResponse.status.value}"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bankA.bic,
                             bankName = bankA.name,
                             scenario = "CROSS_BANK_TRANSFER",
                             passed = false,
-                            message = "Initial deposit to sender IBAN at ${bankA.name} failed: ${depositResponse.status.value}",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = "Actual: Deposit HTTP ${depositResponse.status.value}"
                         )
@@ -1328,13 +1693,27 @@ class TrafficSimulator(
                 if (withdrawSenderResponse.status != HttpStatusCode.OK || routerResult.status != TransferStatus.ACCEPTED) {
                     checkResponseTunnelStatus(Bic(bankA.bic), withdrawSenderResponse.status)
                     bankRegistry.recordTransaction(Bic(bankA.bic), false, 0L)
+                    val failureMsg = "Cross-bank transfer routing failed: Debit status=${withdrawSenderResponse.status.value}, Router status=${routerResult.status} (${routerResult.message})"
+                    val httpReq = if (withdrawSenderResponse.status != HttpStatusCode.OK) {
+                        formatWithdrawHttp(bankA.webhookUrl, "Debit Bank A for Outgoing Cross-Bank Transfer", ibanFrom, transferAmountCents)
+                    } else {
+                        formatTransferInHttp(bankB.webhookUrl, "Incoming SWIFT Transfer to Bank B", transferRequest)
+                    }
+                    sendDebugFailure(
+                        webhookUrl = if (withdrawSenderResponse.status != HttpStatusCode.OK) bankA.webhookUrl else bankB.webhookUrl,
+                        scenario = "CROSS_BANK_TRANSFER",
+                        message = failureMsg,
+                        httpRequest = httpReq,
+                        expectedResponse = "HTTP 200 OK (ACCEPTED)",
+                        actualResponse = "Debit status: HTTP ${withdrawSenderResponse.status.value}, Router status: ${routerResult.status} (${routerResult.message})"
+                    )
                     results.add(
                         ScenarioResult(
                             bic = bankA.bic,
                             bankName = bankA.name,
                             scenario = "CROSS_BANK_TRANSFER",
                             passed = false,
-                            message = "Cross-bank transfer routing failed: Debit status=${withdrawSenderResponse.status.value}, Router status=${routerResult.status} (${routerResult.message})",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = "Actual: Debit HTTP ${withdrawSenderResponse.status.value}, SWIFT Router: ${routerResult.status}"
                         )
@@ -1371,13 +1750,34 @@ class TrafficSimulator(
                     )
                 } else {
                     bankRegistry.recordTransaction(Bic(bankA.bic), false, 0L)
+                    val failureMsg = "Cross-bank transfer verification failed: FromBalance=${stmtFrom?.currentBalanceCents} (expected ${ledgerFrom.expectedBalanceCents}), ToBalance=${stmtTo?.currentBalanceCents} (expected ${ledgerTo.expectedBalanceCents})"
+                    if (!fromOk) {
+                        sendDebugFailure(
+                            webhookUrl = bankA.webhookUrl,
+                            scenario = "CROSS_BANK_TRANSFER",
+                            message = failureMsg,
+                            httpRequest = formatStatementHttp(bankA.webhookUrl, "Query Statement for Bank A Sender", ibanFrom),
+                            expectedResponse = "Balance ${ledgerFrom.expectedBalanceCents} cents",
+                            actualResponse = "Balance ${stmtFrom?.currentBalanceCents} cents"
+                        )
+                    }
+                    if (!toOk) {
+                        sendDebugFailure(
+                            webhookUrl = bankB.webhookUrl,
+                            scenario = "CROSS_BANK_TRANSFER",
+                            message = failureMsg,
+                            httpRequest = formatStatementHttp(bankB.webhookUrl, "Query Statement for Bank B Receiver", ibanTo),
+                            expectedResponse = "Balance ${ledgerTo.expectedBalanceCents} cents",
+                            actualResponse = "Balance ${stmtTo?.currentBalanceCents} cents"
+                        )
+                    }
                     results.add(
                         ScenarioResult(
                             bic = bankA.bic,
                             bankName = bankA.name,
                             scenario = "CROSS_BANK_TRANSFER",
                             passed = false,
-                            message = "Cross-bank transfer verification failed: FromBalance=${stmtFrom?.currentBalanceCents} (expected ${ledgerFrom.expectedBalanceCents}), ToBalance=${stmtTo?.currentBalanceCents} (expected ${ledgerTo.expectedBalanceCents})",
+                            message = failureMsg,
                             expected = expectedStr,
                             actual = actualStr
                         )
@@ -1388,6 +1788,14 @@ class TrafficSimulator(
                 logger.warn("Cross-bank transfer scenario failed for ${bankA.name}: $err")
                 bankRegistry.updateStatus(Bic(bankA.bic), "DOWN", null, "Unreachable: ${err.take(50)}")
                 bankRegistry.recordTransaction(Bic(bankA.bic), false, 0L)
+                sendDebugFailure(
+                    webhookUrl = bankA.webhookUrl,
+                    scenario = "CROSS_BANK_TRANSFER",
+                    message = "Exception during test: $err",
+                    httpRequest = formatWithdrawHttp(bankA.webhookUrl, "Debit Bank A Sender", ibanFrom, transferAmountCents),
+                    expectedResponse = "HTTP 200 OK",
+                    actualResponse = "Exception: $err"
+                )
                 results.add(
                     ScenarioResult(
                         bic = bankA.bic,

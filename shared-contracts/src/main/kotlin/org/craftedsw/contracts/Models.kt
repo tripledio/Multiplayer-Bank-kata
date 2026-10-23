@@ -232,3 +232,15 @@ data class ScenarioResult(
     val expected: String = "",
     val actual: String = ""
 )
+
+@Serializable
+data class DebugReport(
+    val id: String = "",
+    val timestamp: Long = 0L,
+    val scenario: String,
+    val message: String,
+    val httpRequest: String,
+    val expectedResponse: String,
+    val actualResponse: String,
+    val passed: Boolean = false
+)

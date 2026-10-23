@@ -25,6 +25,7 @@ fun main() {
     val swiftClient = SwiftClient()
 
     logger.info("Starting Bank node '$bankName' (BIC: $bic) on port $port...")
+    logger.info("Participant Debug UI available at: http://localhost:$port/")
 
     if (!swiftHubUrl.isNullOrBlank() && !tunnelUrl.isNullOrBlank()) {
         CoroutineScope(Dispatchers.IO).launch {
@@ -51,7 +52,8 @@ fun main() {
             bankService = bankService,
             swiftClient = swiftClient,
             swiftHubUrl = swiftHubUrl,
-            bic = bic
+            bic = bic,
+            bankName = bankName
         )
     }.start(wait = true)
 }

@@ -80,12 +80,14 @@ curl -X POST http://<FACILITATOR_IP>:9000/swift/register \
   }'
 ```
 
-### 5. Start Your Bank Node
+### 5. Start Your Bank Node & Open Local Debug Dashboard
 Launch your bank application with your assigned 8-character BIC code:
 ```bash
 PORT=8080 BIC=<YOUR_GENERATED_BIC> BANK_NAME="Bank Alpha" ./gradlew :bank-starter:run
 ```
-Watch your bank appear on the live projector scoreboard!
+- Open your **Local Bank Debug Dashboard**: [`http://localhost:8080/`](http://localhost:8080/)
+- Whenever SWIFT Hub executes test scenarios or simulation bursts against your bank node, any failing requests are captured with their exact **IntelliJ HTTP Client snippet** and expected vs received response so you can easily copy and reproduce them locally!
+- Watch your bank appear on the live projector scoreboard!
 
 ---
 

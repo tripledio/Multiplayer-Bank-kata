@@ -90,4 +90,23 @@ class ModelsTest {
 
         assertThat(deserialized).isEqualTo(graph)
     }
+
+    @Test
+    fun `should serialize and deserialize DebugReport correctly`() {
+        val report = DebugReport(
+            id = "dbg-1",
+            timestamp = 1729000000000L,
+            scenario = "DEPOSIT_50_EUR",
+            message = "Expected 200 OK",
+            httpRequest = "POST /api/deposit",
+            expectedResponse = "HTTP 200 OK",
+            actualResponse = "HTTP 400 Bad Request",
+            passed = false
+        )
+
+        val jsonString = json.encodeToString(report)
+        val deserialized = json.decodeFromString<DebugReport>(jsonString)
+
+        assertThat(deserialized).isEqualTo(report)
+    }
 }

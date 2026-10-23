@@ -126,3 +126,15 @@ Content-Type: application/json
         client.assert(response.body.status === "ACCEPTED", "Transfer status is not ACCEPTED");
     });
 %}
+
+### -------------------------------------------------------------------------
+### 8. Participant Debug Reports & Feedback
+### -------------------------------------------------------------------------
+# Retrieve all failed scenario reports and IntelliJ HTTP snippets sent by SWIFT Hub.
+GET {{bankUrl}}/api/debug
+
+### -------------------------------------------------------------------------
+### 8b. Clear Debug Reports
+### -------------------------------------------------------------------------
+# Clear all recorded debug reports.
+DELETE {{bankUrl}}/api/debug

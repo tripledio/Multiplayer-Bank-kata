@@ -1,5 +1,6 @@
 package org.craftedsw.bank.api
 
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
@@ -10,14 +11,18 @@ import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.craftedsw.bank.client.SwiftClient
+import org.craftedsw.bank.debug.DebugStore
 import org.craftedsw.bank.service.BankService
+import org.craftedsw.bank.ui.BankDebugHtml
 import org.craftedsw.contracts.BalanceResponse
+import org.craftedsw.contracts.DebugReport
 import org.craftedsw.contracts.DepositRequest
 import org.craftedsw.contracts.ErrorResponse
 import org.craftedsw.contracts.HealthResponse
@@ -30,7 +35,9 @@ fun Application.bankModule(
     bankService: BankService = BankService(),
     swiftClient: SwiftClient = SwiftClient(),
     swiftHubUrl: String? = null,
-    bic: String = "BANKAXXX"
+    bic: String = "BANKAXXX",
+    bankName: String = "Participant Bank",
+    debugStore: DebugStore = DebugStore()
 ) {
     install(AutoHeadResponse)
 
@@ -51,6 +58,46 @@ fun Application.bankModule(
     }
 
     routing {
+        get("/") {
+            call.respondText(
+                text = BankDebugHtml.render(bankName = bankName, bic = bic, swiftHubUrl = swiftHubUrl),
+                contentType = ContentType.Text.Html
+            )
+        }
+
+        get("/debug") {
+            call.respondText(
+                text = BankDebugHtml.render(bankName = bankName, bic = bic, swiftHubUrl = swiftHubUrl),
+                contentType = ContentType.Text.Html
+            )
+        }
+
+        get("/api/debug") {
+            call.respond(HttpStatusCode.OK, debugStore.getAll())
+        }
+
+        post("/api/debug") {
+            val report = call.receive<DebugReport>()
+            debugStore.add(report)
+            call.respond(HttpStatusCode.OK, mapOf("status" to "RECORDED", "id" to report.id))
+        }
+
+        post("/debug") {
+            val report = call.receive<DebugReport>()
+            debugStore.add(report)
+            call.respond(HttpStatusCode.OK, mapOf("status" to "RECORDED", "id" to report.id))
+        }
+
+        delete("/api/debug") {
+            debugStore.clear()
+            call.respond(HttpStatusCode.OK, mapOf("status" to "CLEARED"))
+        }
+
+        post("/api/debug/clear") {
+            debugStore.clear()
+            call.respond(HttpStatusCode.OK, mapOf("status" to "CLEARED"))
+        }
+
         get("/health") {
             call.respond(HttpStatusCode.OK, HealthResponse(status = "UP", bic = bic))
         }
