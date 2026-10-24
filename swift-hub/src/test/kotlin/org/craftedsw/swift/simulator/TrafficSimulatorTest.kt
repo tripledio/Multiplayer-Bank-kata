@@ -504,4 +504,82 @@ class TrafficSimulatorTest {
         assertThat(debugReportJson).contains("HTTP 200 OK")
         assertThat(debugReportJson).contains("HTTP 400")
     }
+
+    @Test
+    fun `should execute scenarios for multiple banks in parallel and independently`() = runTest {
+        bankRegistry.register(RegisterBankRequest(bic = "BANKFAST", name = "Fast Bank", webhookUrl = "http://fast:8080"))
+        bankRegistry.register(RegisterBankRequest(bic = "BANKSLOW", name = "Slow Bank", webhookUrl = "http://slow:8080"))
+        bankRegistry.register(RegisterBankRequest(bic = "BANKFAIL", name = "Failing Bank", webhookUrl = "http://fail:8080"))
+
+        val mockEngine = MockEngine { request ->
+            val host = request.url.host
+            val url = request.url.encodedPath
+
+            if (host == "fast") {
+                if (url.endsWith("/api/deposit")) {
+                    respond(
+                        content = Json.encodeToString(BalanceResponse(iban = "BE68BANKFAST0001234", balanceCents = 5000L)),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                } else {
+                    respond(
+                        content = Json.encodeToString(
+                            StatementResponse(
+                                iban = "BE68BANKFAST0001234",
+                                lines = listOf(StatementLineDto(date = "16/10/2026", credit = "50.00", balance = "50.00")),
+                                currentBalanceCents = 5000L
+                            )
+                        ),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                }
+            } else if (host == "slow") {
+                // Simulate slow bank response
+                kotlinx.coroutines.delay(50)
+                if (url.endsWith("/api/deposit")) {
+                    respond(
+                        content = Json.encodeToString(BalanceResponse(iban = "BE68BANKSLOW0001234", balanceCents = 5000L)),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                } else {
+                    respond(
+                        content = Json.encodeToString(
+                            StatementResponse(
+                                iban = "BE68BANKSLOW0001234",
+                                lines = listOf(StatementLineDto(date = "16/10/2026", credit = "50.00", balance = "50.00")),
+                                currentBalanceCents = 5000L
+                            )
+                        ),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                }
+            } else {
+                // host == "fail"
+                respond(
+                    content = "Server error",
+                    status = HttpStatusCode.InternalServerError
+                )
+            }
+        }
+
+        val mockHttpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) { json() }
+        }
+
+        val sim = TrafficSimulator(bankRegistry, transferRouter, mockHttpClient)
+        val results = sim.runPositiveDepositScenario()
+
+        assertThat(results).hasSize(3)
+        val fastResult = results.first { it.bic == "BANKFAST" }
+        val slowResult = results.first { it.bic == "BANKSLOW" }
+        val failResult = results.first { it.bic == "BANKFAIL" }
+
+        assertThat(fastResult.passed).isTrue()
+        assertThat(slowResult.passed).isTrue()
+        assertThat(failResult.passed).isFalse()
+    }
 }
